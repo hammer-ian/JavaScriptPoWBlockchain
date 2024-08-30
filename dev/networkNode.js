@@ -97,7 +97,7 @@ app.post('/transaction/broadcast', function (req, res) {
     //build the "new transaction" broadcast request for each of the other nodes
     blockchain.networkNodes.forEach(networkNodeUrl => {
         const requestOptions = {
-            uri: networkNodeUrl + '/receiveNewTransaction',
+            uri: networkNodeUrl + '/receive-new-transaction',
             method: 'POST',
             body: newTransaction,
             json: true
@@ -114,7 +114,7 @@ app.post('/transaction/broadcast', function (req, res) {
 });
 
 //used to receive new transactions from other network nodes
-app.post('/receiveNewTransaction', function (req, res) {
+app.post('/receive-new-transaction', function (req, res) {
     logger.info(`New transaction request received ${JSON.stringify(req.body)}`);
     const newTransaction = req.body;
     const blockIndex = blockchain.addNewTransactionToPendingTransactions(newTransaction);
