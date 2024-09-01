@@ -25,21 +25,21 @@ const logger = {
 // Handle application shutdown to close the log stream properly
 function handleShutdown() {
     logStream.end(() => {
-        console.log('Log stream closed.');
+        logToFile('Log stream closed.');
     });
 }
 
 // Listen for process termination signals from Node and the exit event
-process.on('exit', handleShutdown); // Normal exit
+process.on('exit', handleShutdown ); // Normal exit
 
 process.on('SIGINT', () => {
-    console.log('Received SIGINT. Shutting down...');
+    logToFile('Received SIGINT. Shutting down...');
     handleShutdown();
     process.exit(); // Exit explicitly after closing the stream
 });
 
 process.on('SIGTERM', () => {
-    console.log('Received SIGTERM. Shutting down...');
+    logToFile('Received SIGTERM. Shutting down...');
     handleShutdown();
     process.exit(); // Exit explicitly after closing the stream
 });
