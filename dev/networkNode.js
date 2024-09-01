@@ -118,7 +118,7 @@ app.post('/receive-new-transaction', function (req, res) {
     logger.info(`New transaction request received ${JSON.stringify(req.body)}`);
     const newTransaction = req.body;
     const blockIndex = blockchain.addNewTransactionToPendingTransactions(newTransaction);
-    res.json({ note: `transaction will be added in block ${blockIndex}` });
+    res.json({ note: `transaction will be added in block ${blockIndex}`, respondingNode: `${blockchain.currentNodeUrl}` });
 });
 
 app.get('/mine', function (req, res) {
