@@ -97,7 +97,7 @@ app.post('/transaction/broadcast', function (req, res) {
     //build the "new transaction" broadcast request for each of the other nodes
     blockchain.networkNodes.forEach(networkNodeUrl => {
         const requestOptions = {
-            uri: networkNodeUrl + '/receive-new-transaction',
+            uri: networkNodeUrl + '/internal/receive-new-transaction',
             method: 'POST',
             body: newTransaction,
             json: true
@@ -114,7 +114,7 @@ app.post('/transaction/broadcast', function (req, res) {
 });
 
 //used to receive new transactions from other network nodes
-app.post('/receive-new-transaction', function (req, res) {
+app.post('/internal/receive-new-transaction', function (req, res) {
     logger.info(`New transaction request received ${JSON.stringify(req.body)}`);
     const newTransaction = req.body;
     const blockIndex = blockchain.addNewTransactionToPendingTransactions(newTransaction);
@@ -135,7 +135,7 @@ app.get('/mine', function (req, res) {
 
     blockchain.networkNodes.forEach(networkNodeUrl => {
         const requestOptions = {
-            uri: networkNodeUrl + '/receive-new-block',
+            uri: networkNodeUrl + '/internal/receive-new-block',
             method: 'POST',
             body: { newBlock: newBlock },
             json: true
@@ -169,7 +169,7 @@ app.get('/mine', function (req, res) {
         });
 });
 
-app.post('/receive-new-block', function (req, res) {
+app.post('/internal/receive-new-block', function (req, res) {
 
     const newBlock = req.body.newBlock;
     const lastBlock = blockchain.getLastBlock();
@@ -216,7 +216,7 @@ app.post('/register-and-broadcast-node', function (req, res) {
     //Loop through all registered network nodes creating a request to register the new node
     blockchain.networkNodes.forEach(networkNodeUrl => {
         const requestOptions = {
-            uri: networkNodeUrl + '/register-node',
+            uri: networkNodeUrl + '/internal/register-node',
             method: 'POST',
             body: { newNodeURL: newNodeURL },
             json: true
@@ -238,7 +238,7 @@ app.post('/register-and-broadcast-node', function (req, res) {
 	    /*Now the new node is registered, we need to tell the NEW node about ALL the other nodes
             this endpoint is only hit on the NEW node instance */
             const bulkRegisterOptions = {
-                uri: newNodeURL + '/register-nodes-bulk',
+                uri: newNodeURL + '/internal/register-nodes-bulk',
                 method: 'POST',
                 body: { allNetworkNodes: [...blockchain.networkNodes, blockchain.currentNodeUrl] },
                 json: true
@@ -255,7 +255,7 @@ app.post('/register-and-broadcast-node', function (req, res) {
 
 /* This endpoint is called by the node which has received the broadcast request, to register the new node with 
 other nodes on the network */
-app.post('/register-node', function (req, res) {
+app.post('/internal/register-node', function (req, res) {
     logger.info(`register-node: request received`);
     const newNodeURL = req.body.newNodeURL;
     //check if new node is already registered, and new node is not current node
@@ -274,7 +274,7 @@ app.post('/register-node', function (req, res) {
 
 /* Register all nodes at once. 
  Called by a new node once it's URL has been successfully broadcast to all existing nodes */
-app.post('/register-nodes-bulk', function (req, res) {
+app.post('/internal/register-nodes-bulk', function (req, res) {
     logger.info(`register-node-bulk: request received`);
     logger.info(req.body.allNetworkNodes);
     const allNetworkNodes = req.body.allNetworkNodes;
