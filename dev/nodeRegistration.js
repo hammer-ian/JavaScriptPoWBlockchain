@@ -31,34 +31,43 @@ const registerThisNode = (blockchain, networkNodeIP) => {
         const postData = { newNodeURL: blockchain.currentNodeUrl };
 
         let privateIP;
-        const privateIPAddresses = await findHealthyInstance(targetGroupArn);
-        for (const ip of privateIPAddresses){
-            //this node does not want to register with itself, so check healthy IP is different from this nodes IP
-            if(ip !== networkNodeIP){
-                privateIP = ip;
-            }
-        }
+        const healthyIPAddresses = await findHealthyEC2Instances(targetGroupArn);
+        logger.info(`HealthyIPAddresses: ${healthyIPAddresses}`); 
 
-        //Ensure we've found a healthy EC2 instance IP address
-        if(privateIP) {
+	for (let i=0; i<healthyIPAddresses.length; i++){ 
+            privateIP = healthyIPAddresses[i];
 
-            const registrationURL = `http://${privateIP}:${networkNodePort}/register-and-broadcast-node`;
+            //Ensure we've found a healthy EC2 instance IP address
+            if(privateIP) {
 
-            //Make POST request using axios
-            try {
-                logger.info(`Initiating POST registration request using URL: ${registrationURL}`);
-                const response = await axios.post(registrationURL, postData);
-                logger.info('Response:', response.data);
+                const Ec2Url = `http://${privateIP}:${networkNodePort}`; 
+	        //check blockchain node is running on the healthy EC2 instance
+	        const nodeListening = await checkNodeIsListening(Ec2Url);
+                if(nodeListening){ 	
+
+	            const registrationURL = `${Ec2Url}/register-and-broadcast-node`;
+
+                    //Make POST request using axios
+                    try {
+                        logger.info(`Initiating POST registration request using URL: ${registrationURL}`);
+                        const response = await axios.post(registrationURL, postData);
+                        logger.info(`Reply from ${Ec2Url}: ${JSON.stringify(response.data)}`);
+                        //we have successfully registered so we can exit the loop 
+		        break;
+                    }
+                    catch(error) {
+                        logger.info(`Error making POST request to register node on ${Ec2Url}: ${error}`);
+                    }
+	        } else {
+                    logger.info(`Did not detect blockchain node listening on ${Ec2Url}. Will attempt to register at next healthy EC2 instance`);
+	        }
+            } else {
+                    logger.info('Failed to find healthy EC2 instances, registration aborted');
             }
-            catch(error) {
-                logger.info('Error making POST request:', error);
-            }
-        } else {
-                logger.info('Failed to find healthy EC2 instance, registration aborted');
-        }
+	}
     }
 
-    async function findHealthyInstance(targetGroupArn, interval = 10000) {
+    async function findHealthyEC2Instances(targetGroupArn, interval = 10000) {
 
         const params = { TargetGroupArn: targetGroupArn };
 
@@ -79,16 +88,21 @@ const registerThisNode = (blockchain, networkNodeIP) => {
                 }
             }
 
-            logger.info('Healthy Instances found:');
+            logger.info('Healthy EC2 Instances found, now retrieving the private of IP of each instance');
             const privateIPAddresses = [];
             for (const target of healthyInstances) {
                 const instanceId = target.Target.Id;
                 const privateIp = await getPrivateIp(instanceId);
 
                 privateIPAddresses.push(privateIp);
-                logger.info(`Instance ID: ${instanceId}, Private IP: ${privateIp} is healthy`);
+                logger.info(`Instance ID: ${instanceId}, Private IP: ${privateIp}`);
             }
-            //return internal (private) IP address of a healthy instance so we can register our node
+            
+            //Before returning the array remove this nodes IP from the list of IPs we return. A node should not attempt to register with itself
+	    const index = privateIPAddresses.indexOf(networkNodeIP); 
+            if (index !== -1) privateIPAddresses.splice(index,1);
+
+	    //return internal (private) IP address of a healthy instance so we can register our node
             return privateIPAddresses;
 
         } catch (err) {
@@ -108,6 +122,20 @@ const registerThisNode = (blockchain, networkNodeIP) => {
             logger.info(`Error retrieving IP for instance ${instanceId}:`, err);
             return 'N/A';
         }
+    }
+
+    async function checkNodeIsListening(urlToCheck){
+
+        try{
+            logger.info(`Checking if blockchain node is listening on ${urlToCheck}. Node has 3 seconds to respond`);	
+            const response = await axios.get(urlToCheck, { timeout: 3000 } );
+            logger.info(`${urlToCheck} is listening!`);
+            return true;
+	} catch {
+            logger.info(`Error: a blockchain node does not appear to be listening on ${urlToCheck}`);
+            return false;
+	}
+         
     }
 
     sendPostRequest();
