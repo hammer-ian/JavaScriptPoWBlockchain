@@ -34,47 +34,47 @@ const registerThisNode = (blockchain, networkNodeIP) => {
         const healthyIPAddresses = await findHealthyEC2Instances(targetGroupArn);
         logger.info(`HealthyIPAddresses: ${healthyIPAddresses}`); 
 
+        if(healthyIPAddresses.length === 0){
+            logger.error('No healthy EC2 instances available to register new node. Registration aborted');
+            return;
+	}
+
 	for (let i=0; i<healthyIPAddresses.length; i++){ 
             privateIP = healthyIPAddresses[i];
 
-            //Ensure we've found a healthy EC2 instance IP address
-            if(privateIP) {
+            const Ec2Url = `http://${privateIP}:${networkNodePort}`; 
+	    //check blockchain node is running on the healthy EC2 instance
+	    const nodeListening = await checkNodeIsListening(Ec2Url);
+            if(nodeListening){ 	
 
-                const Ec2Url = `http://${privateIP}:${networkNodePort}`; 
-	        //check blockchain node is running on the healthy EC2 instance
-	        const nodeListening = await checkNodeIsListening(Ec2Url);
-                if(nodeListening){ 	
+	        const registrationURL = `${Ec2Url}/register-and-broadcast-node`;
 
-	            const registrationURL = `${Ec2Url}/register-and-broadcast-node`;
-
-                    //Make POST request using axios
-                    try {
-                        logger.info(`Initiating POST registration request using URL: ${registrationURL}`);
-                        const response = await axios.post(registrationURL, postData);
-                        logger.info(`Reply from ${Ec2Url}: ${JSON.stringify(response.data)}`);
-                        //we have successfully registered so we can exit the loop 
-		        break;
-                    }
-                    catch(error) {
-                        logger.info(`Error making POST request to register node on ${Ec2Url}: ${error}`);
-                    }
-	        } else {
-                    logger.info(`Did not detect blockchain node listening on ${Ec2Url}. Will attempt to register at next healthy EC2 instance`);
-	        }
-            } else {
-                    logger.info('Failed to find healthy EC2 instances, registration aborted');
-            }
+                //Make POST request using axios
+                try {
+                    logger.info(`Initiating POST registration request using URL: ${registrationURL}`);
+                    const response = await axios.post(registrationURL, postData);
+                    logger.info(`Reply from ${Ec2Url}: ${JSON.stringify(response.data)}`);
+                    //we have successfully registered so we can exit the loop 
+	            break;
+                }
+                catch(error) {
+                    logger.error(`Error making POST request to register node on ${Ec2Url}: ${error}`);
+                }
+	    } else {
+                logger.error(`Did not detect blockchain node listening on ${Ec2Url}`);
+	    }
 	}
     }
 
-    async function findHealthyEC2Instances(targetGroupArn, interval = 10000) {
+    async function findHealthyEC2Instances(targetGroupArn, interval = 10000, maxRetries = 5) {
 
         const params = { TargetGroupArn: targetGroupArn };
+        let retryCount = 0;
 
         try {
             let healthyInstances = [];
 
-            while (healthyInstances.length === 0) {
+            while (healthyInstances.length === 0 && retryCount < maxRetries) {
                 logger.info('Looking for healthy EC2 instance to register with');
                 const data = await elbv2.describeTargetHealth(params).promise();
                 healthyInstances = data.TargetHealthDescriptions.filter(
@@ -82,13 +82,18 @@ const registerThisNode = (blockchain, networkNodeIP) => {
                 );
 
                 if(healthyInstances.length === 0) {
-
-                    logger.info(`No healthy instances found, Retrying in ${interval} milliseconds`);
+                    retryCount++;
+                    logger.info(`No healthy instances found, Retrying in ${interval/1000} seconds`);
                     await new Promise(resolve => setTimeout(resolve, interval));
                 }
             }
+            //very unlikely to find zero healthy EC2 instances as the runtime that's executing this code is hosted on an EC2 instance, but just in case.. 
+            if(healthyInstances.length === 0){
+                logger.info('No healthy EC2 instances were found after max retries, node registration not possible'); 
+	        return [];
+	    }
 
-            logger.info('Healthy EC2 Instances found, now retrieving the private of IP of each instance');
+            logger.info('Healthy EC2 Instances potentially found, now retrieving the private of IP of each instance to double check');
             const privateIPAddresses = [];
             for (const target of healthyInstances) {
                 const instanceId = target.Target.Id;
@@ -99,14 +104,15 @@ const registerThisNode = (blockchain, networkNodeIP) => {
             }
             
             //Before returning the array remove this nodes IP from the list of IPs we return. A node should not attempt to register with itself
+	    logger.info('Removing this hosts IP address from list of healthy EC2. A node cannot register with itself'); 
 	    const index = privateIPAddresses.indexOf(networkNodeIP); 
             if (index !== -1) privateIPAddresses.splice(index,1);
 
-	    //return internal (private) IP address of a healthy instance so we can register our node
+	    //return internal (private) IP address of a healthy instances so we can register our new node
             return privateIPAddresses;
 
         } catch (err) {
-            logger.info('Error describing target health:', err);
+            logger.info(`Error describing target health: ${err}`);
         }
     }
 
