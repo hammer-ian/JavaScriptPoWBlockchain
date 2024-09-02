@@ -1,3 +1,4 @@
+const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
@@ -13,7 +14,8 @@ const logStream = fs.createWriteStream(`${logPath}/logs-${port}.txt`, { flags: '
 
 function logToFile(message) {
     const timestamp = new Date().toISOString();
-    logStream.write(`[${timestamp}] ${message}\n`); 
+    const callerInfo = getCallerInfo();
+    logStream.write(`[${timestamp}] [${callerInfo}] ${message}\n`); 
 }
 
 const logger = {
@@ -27,6 +29,25 @@ function handleShutdown() {
     logStream.end(() => {
         logToFile('Log stream closed.');
     });
+}
+
+function getCallerInfo() {
+    const originalFunc = Error.prepareStackTrace;
+
+    try {
+        const err = new Error();
+        Error.prepareStackTrace = (_, stack) => stack;
+        const stack = err.stack;
+        const caller = stack[3]; // Stack[2] is the caller of the logging function
+        const fileName = path.basename(caller.getFileName());
+        const lineNumber = caller.getLineNumber();
+        const functionName = caller.getFunctionName() || 'anonymous function';
+        return `${fileName}:${lineNumber} (${functionName})`;
+    } catch (e) {
+        return `unknown location ${e}`;
+    } finally {
+        Error.prepareStackTrace = originalFunc;
+    }
 }
 
 // Listen for process termination signals from Node and the exit event
