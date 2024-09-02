@@ -36,7 +36,7 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
 
         if(healthyIPAddresses.length === 0){
             logger.error('No healthy EC2 instances available to register new node. Registration aborted');
-            return;
+            return registrationSuccess;
 	}
 
 	for (let i=0; i<healthyIPAddresses.length; i++){ 
@@ -115,6 +115,7 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
 
         } catch (err) {
             logger.info(`Error describing target health: ${err}`);
+            return [];
         }
     }
 
@@ -164,7 +165,7 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
     //if node registration is a success then run consensus check to ensure this node has latest copy of the blockchain
     if(registrationSuccess){
 
-        runConsensusCheck();
+        await runConsensusCheck();
     }
 }
 
