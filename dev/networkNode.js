@@ -327,7 +327,7 @@ app.get('/consensus', function (req, res) {
             //if there is no new longer chain, or the longer chain is not valid
             if (!newLongestChain || (newLongestChain && !blockchain.chainIsValid(newLongestChain))) {
                 res.json({
-                    note: "Current chain has NOT been replaced",
+                    note: "Local chain has NOT been replaced",
                     chain: blockchain.chain
                 });
             } else if (newLongestChain && blockchain.chainIsValid(newLongestChain)) {
@@ -336,7 +336,7 @@ app.get('/consensus', function (req, res) {
                 blockchain.pendingTransactions = newPendingTransactions;
 
                 res.json({
-                    note: "Current chain HAS been replaced",
+                    note: "Local chain HAS been replaced",
                     chain: blockchain.chain
                 });
             }

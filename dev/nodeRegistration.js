@@ -15,7 +15,7 @@ const networkNodePort = process.env.PORT;
 const targetGroupArn = process.env.AWS_ALB_TG_ARN;
 const logger = require('./logger');
 
-const registerThisNode = (blockchain, networkNodeIP) => {
+const registerThisNode = async (blockchain, networkNodeIP) => {
 
     logger.info(`registerThisNode: registering ${blockchain.currentNodeUrl}`); 
 
@@ -30,7 +30,7 @@ const registerThisNode = (blockchain, networkNodeIP) => {
 
         const postData = { newNodeURL: blockchain.currentNodeUrl };
 
-        let privateIP;
+        let privateIP, registrationSuccess=false;
         const healthyIPAddresses = await findHealthyEC2Instances(targetGroupArn);
         logger.info(`HealthyIPAddresses: ${healthyIPAddresses}`); 
 
@@ -54,7 +54,8 @@ const registerThisNode = (blockchain, networkNodeIP) => {
                     logger.info(`Initiating POST registration request using URL: ${registrationURL}`);
                     const response = await axios.post(registrationURL, postData);
                     logger.info(`Reply from ${Ec2Url}: ${JSON.stringify(response.data)}`);
-                    //we have successfully registered so we can exit the loop 
+                    //we have successfully registered so we can exit the loop
+	            registrationSuccess = true;
 	            break;
                 }
                 catch(error) {
@@ -64,6 +65,7 @@ const registerThisNode = (blockchain, networkNodeIP) => {
                 logger.error(`Did not detect blockchain node listening on ${Ec2Url}`);
 	    }
 	}
+        return registrationSuccess;
     }
 
     async function findHealthyEC2Instances(targetGroupArn, interval = 10000, maxRetries = 5) {
@@ -137,14 +139,33 @@ const registerThisNode = (blockchain, networkNodeIP) => {
             const response = await axios.get(urlToCheck, { timeout: 3000 } );
             logger.info(`${urlToCheck} is listening!`);
             return true;
-	} catch {
-            logger.info(`Error: a blockchain node does not appear to be listening on ${urlToCheck}`);
+	} catch (err) {
+            logger.error(`Error: a blockchain node does not appear to be listening on ${urlToCheck}. Error: ${err}`);
             return false;
 	}
-         
     }
 
-    sendPostRequest();
+    async function runConsensusCheck(){
+
+        try{
+            logger.info('Starting consensus check..'); 
+	    const response = await axios.get(`${blockchain.currentNodeUrl}/consensus`,  { timeout: 3000 } );
+            logger.info(`Response: ${JSON.stringify(response.data)}`);
+
+	} catch (err) {
+            logger.error(`Consensus check failed. Error: ${err}`);
+	}
+
+    }
+    //Initiate the node registration
+    const registrationSuccess = await sendPostRequest();
+    logger.info(`Registration status: ${registrationSuccess}`);
+
+    //if node registration is a success then run consensus check to ensure this node has latest copy of the blockchain
+    if(registrationSuccess){
+
+        runConsensusCheck();
+    }
 }
 
 const deRegisterThisNode = () => {
