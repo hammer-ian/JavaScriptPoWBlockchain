@@ -18,9 +18,9 @@ const nodeAddress = uuidv4().split('-').join('');
 
 //Import environment config and internal modules
 require('dotenv').config();
-const logger = require('./logger');
+const logger = require('./utils/logger');
 const Blockchain = require('./blockchain');
-const { registerThisNode, deRegisterThisNode } = require('./nodeRegistration.js');
+const { registerThisNode, deRegisterThisNode } = require('./nodeRegistration');
 
 //Set up express server
 const express = require('express');
@@ -79,6 +79,13 @@ app.get('/', function (req, res) {
 
 app.get('/blockchain', function (req, res) {
     res.send(blockchain);
+});
+
+//Endpoint which validates the end to end route from ALB -> Apache(port 80) -> /app/ ProxyPass -> localhost(3001)
+//If endpoint does not respond with 200 we can assume there is an issue with the route
+//If issue: ALB will stop routing requests to that EC2 instance and the other nodes need to deregister the unhealthy node
+app.get('/healthcheck', async (req, res) => {
+    res.status(200).send('OK');
 });
 
 //create new transaction Obj and broadcast new transaction to other network nodes

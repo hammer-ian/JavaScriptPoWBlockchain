@@ -13,11 +13,11 @@ const axios = require('axios'); //manage internal HTTP requests
 require('dotenv').config();
 const networkNodePort = process.env.PORT;
 const targetGroupArn = process.env.AWS_ALB_TG_ARN;
-const logger = require('./logger');
+const logger = require('./utils/logger');
 
 const registerThisNode = async (blockchain, networkNodeIP) => {
 
-    logger.info(`registerThisNode: registering ${blockchain.currentNodeUrl}`); 
+    logger.info(`Registering ${blockchain.currentNodeUrl}`); 
 
     //Specify AWS Region
     AWS.config.update({ region: process.env.AWS_REGION });
@@ -169,6 +169,9 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
     }
 }
 
+//Two scenarios to be handled
+//1. EC2 instance dies. ELB will auto stop routing requests when healthcheck fails but we need to deregister the dead node to prevent timeouts
+//2. Blockchain node dies. ELB will continue routing requests so we need to tell ELB to stop sending requests, and also deregister dead node
 const deRegisterThisNode = () => {
 
     logger.info(`Deregistering node: `);

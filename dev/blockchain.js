@@ -1,5 +1,5 @@
 //requried for logging
-const logger = require('./logger');
+const logger = require('./utils/logger');
 
 const sha256 = require('sha256');
 const { v4: uuidv4 } = require('uuid');
