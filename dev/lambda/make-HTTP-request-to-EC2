@@ -1,0 +1,39 @@
+import axios from "axios";
+
+export const handler = async (event) => {
+
+  console.log(`Logging event received from upstream Lambda: ${JSON.stringify(event)}`);
+  
+  const healthyIPArr = event.healthyIPs;
+  
+  await initiateDeregistrationRequest(healthyIPArr);
+  
+  async function initiateDeregistrationRequest(healthyIPArr){  
+  
+    for(let i=0; i<healthyIPArr.length; i++){  
+      try {
+        const URL = `http://${healthyIPArr[i]}:${process.env.FIND_UNHEALTHY_NODE_ENDPOINT}`;
+        console.log(`URL to be called: ${URL}`);
+        
+        // Set a reasonable timeout in axios (e.g., 5 seconds)
+        const response = await axios.get(URL, { timeout: 5000 });
+        
+        console.log(`STATUS: ${response.status}`);
+        console.log(`Response data: ${JSON.stringify(response.data)}`);
+        break;      
+      } catch (error) {
+        if (error.response) {
+          // The request was made, but the server responded with a status code outside of the 2xx range
+          console.log(`Error Response: ${error.response.status}`, error.response.data);
+        } else if (error.request) {
+          // The request was made, but no response was received
+          console.log(`No response received:`, error.request);
+        } else {
+          // Something happened in setting up the request
+          console.log(`Error in setup: ${error.message}`);
+        }
+      }
+    }
+  }
+  
+};
