@@ -20,7 +20,7 @@ const nodeAddress = uuidv4().split('-').join('');
 require('dotenv').config();
 const logger = require('./utils/logger');
 const Blockchain = require('./blockchain');
-const { registerThisNode, deRegisterThisNode } = require('./nodeRegistration');
+const { registerThisNode, findUnhealthyNode } = require('./nodeRegistration');
 
 //Set up express server
 const express = require('express');
@@ -293,6 +293,19 @@ app.post('/internal/register-nodes-bulk', function (req, res) {
     });
     res.json({ note: "Bulk registration successful" });
 });
+
+app.get('/find-unhealthy-node', function (req, res) {
+
+    logger.warn('Request received to find unhealthy node');
+    
+    res.json({ note: `Request received to find unhealthy node. Working on it` });
+});
+
+app.post('/internal/deregister-unhealthy-node', function (req, res){
+
+    //remove the unhealthy node ip from the list of network nodes
+});
+
 
 //Maintain consensus (same data) on each of the blockchain nodes in the network 
 //Uses longest chain algorithm used on PoW networks e.g. Bitcoin

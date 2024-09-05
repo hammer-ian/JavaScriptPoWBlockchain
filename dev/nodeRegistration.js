@@ -169,18 +169,20 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
     }
 }
 
-//Two scenarios to be handled
-//1. EC2 instance dies. ELB will auto stop routing requests when healthcheck fails but we need to deregister the dead node to prevent timeouts
-//2. Blockchain node dies. ELB will continue routing requests so we need to tell ELB to stop sending requests, and also deregister dead node
-const deRegisterThisNode = () => {
+//This function handles both finding the unhealthy node and broadcasting the unhealthy node to the network
+const findUnhealthyNode = async () => {
 
-    logger.info(`Deregistering node: `);
-    // Logic to deregister a node
+    logger.info(`Finding unhealthy node`);
+    // Logic to find unhealthy node
+
+    // Remove unhealthy node from this node's networkNode list
+
+    // Send post request to other healthy network nodes so they also unregister the bad node
 }
 
 module.exports = {
 
     registerThisNode,
-    deRegisterThisNode
+    findUnhealthyNode 
 };
 
