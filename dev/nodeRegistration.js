@@ -170,12 +170,50 @@ const registerThisNode = async (blockchain, networkNodeIP) => {
 }
 
 //This function handles both finding the unhealthy node and broadcasting the unhealthy node to the network
-const findUnhealthyNode = async () => {
+const findUnhealthyNode = async (networkNodes) => {
 
-    logger.info(`Finding unhealthy node`);
-    // Logic to find unhealthy node
+     const unhealthyNodes = []; 
+     logger.info(`Starting looking for unhealthy node`);
+     
+     /* Logic to find unhealthy node. 
+     * We can assume this node is not unhealthy because the lambda function that initiated this request retrieved 
+     * a list of health hosts from the ELB's target group, and this request was successfully received */
+     for (const node of networkNodes){ 
+	try{
+           logger.info(`Checking ${node}`); 
+	   //remove port from the networkNode as we want to test the public route via Apache 
+	   const nodeMinusPort = node.replace(/:\d+$/, ''); 
+           logger.info(`Port removed from node string so healthcheck is routed via Apache proxy/80. Before: ${node}, After: ${nodeMinusPort}`);
+	   const url = `${nodeMinusPort}/app/healthcheck`;
+	   
+           logger.info(`Making GET request to ${url}. Same healthcheck endpoint that AWS Target Group uses`);
+           const response = await axios.get(url);
+           
+	   logger.info(`Healthcheck Response status: ${response.status}. Node ${nodeMinusPort} is healthy`);
+           logger.info(`Response data: ${JSON.stringify(response.data)}`);
+        }
+        catch (error) {
+           if (error.response) {
+              // The request was made, but the server responded with a status code outside of the 2xx range
+              logger.error(`Error with response from ${node}: HTTP response status: ${error.response.status}`);
+           } else if (error.request) {
+              // The request was made, but no response was received
+              logger.error(`No response received from ${node}: ${error.request}`);
+           } else {
+              // Something happened in setting up the request
+              logger.error(`Error in setup: ${error.message}`);
+           }
+           //keep track of unhealthy nodes as we run healthchecks 
+	   unhealthyNodes.push(node);
+        } 
+     }
 
     // Remove unhealthy node from this node's networkNode list
+    if (unhealthyNodes.length !== 0){
+        logger.error(`Finished running network healthchecks, the unhealthy nodes are: ${unhealthyNodes}`);
+    } else {
+        logger.info('No unhealthy nodes found, no more action required');
+    }
 
     // Send post request to other healthy network nodes so they also unregister the bad node
 }

@@ -31,8 +31,14 @@ app.use(bodyParser.urlencoded({ extended: false }))
 
 // logger middleware to log access logs
 app.use((req, res, next) => {
-    logger.info(`${req.method} ${req.hostname} ${req.path} ${JSON.stringify(req.body)}`);
-    next();
+
+    //Temp fix to filter out AWS TargetGroup health checks and reduce log noise 
+    if (req.path === '/healthcheck'){
+        return next();
+    }else {
+        logger.info(`${req.method} ${req.hostname} ${req.path} ${JSON.stringify(req.body)}`);
+        next();
+    }
 });
 
 let networkNodeIP, networkNodePort;
@@ -297,8 +303,12 @@ app.post('/internal/register-nodes-bulk', function (req, res) {
 app.get('/find-unhealthy-node', function (req, res) {
 
     logger.warn('Request received to find unhealthy node');
-    
-    res.json({ note: `Request received to find unhealthy node. Working on it` });
+    findUnhealthyNode(blockchain.networkNodes);
+
+    res.json({ 
+        note: `Request received to find unhealthy node. Working on it`,
+        receivingNode: `${blockchain.currentNodeUrl}`
+    });
 });
 
 app.post('/internal/deregister-unhealthy-node', function (req, res){
