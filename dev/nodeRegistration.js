@@ -208,14 +208,42 @@ const findUnhealthyNode = async (networkNodes) => {
         } 
      }
 
-    // Remove unhealthy node from this node's networkNode list
+    // Make sure found unhealthy node(s) else abort deregistration 
     if (unhealthyNodes.length !== 0){
-        logger.error(`Finished running network healthchecks, the unhealthy nodes are: ${unhealthyNodes}`);
+        logger.error(`Finished running network healthchecks, the unhealthy node(s) are: ${unhealthyNodes}`);
     } else {
         logger.info('No unhealthy nodes found, no more action required');
+        return;
     }
 
-    // Send post request to other healthy network nodes so they also unregister the bad node
+    logger.info('Initiating request to deregister unhealthy node(s) from network');
+    
+    //first remove each unhealthy node from this node's networkNode list
+    for (const unhealthyNode of unhealthyNodes){ 
+	const index = networkNodes.indexOf(unhealthyNode);
+        if (index !== -1) networkNodes.splice(index,1);
+    } 
+    //now we have deregistered (removed) the unhealthy node from our network list, notify the other healthy nodes to do the same
+    //constuct post request object to pass array of unhealthy nodes 
+    const postData = {
+        unhealthyNodes: unhealthyNodes
+    };
+
+    const deregisterEndpoint = '/internal/deregister-unhealthy-node';
+
+    for (const healthyNode of networkNodes){ 
+        const deregisterURL = `${healthyNode}${deregisterEndpoint}`; 
+	try {
+            logger.info(`Sending POST request to deregister unhealthy nodes to: ${deregisterURL}`);
+            const response = await axios.post(deregisterURL, postData);
+            logger.info(`Reply from ${healthyNode}: ${JSON.stringify(response.data)}`);
+        }
+        catch(error) {
+            logger.error(`Error making POST request to register node on ${healthyNode}: ${error}`);
+        }
+    }
+
+ 
 }
 
 module.exports = {

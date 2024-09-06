@@ -313,7 +313,20 @@ app.get('/find-unhealthy-node', function (req, res) {
 
 app.post('/internal/deregister-unhealthy-node', function (req, res){
 
-    //remove the unhealthy node ip from the list of network nodes
+    //remove the unhealthy node(s) from the list of network nodes
+    logger.info(`Request received to deregister ${req.body.unhealthyNodes}`);
+
+    const unhealthyNodes = req.body.unhealthyNodes;
+
+    for (const unhealthyNode of unhealthyNodes){
+        const index = blockchain.networkNodes.indexOf(unhealthyNode);
+        if (index !== -1) blockchain.networkNodes.splice(index,1);
+    } 
+
+    res.json({
+        note: "Unhealthy nodes removed from my networkNode list",
+	updatedNetworkNodeList: blockchain.networkNodes
+    });
 });
 
 
