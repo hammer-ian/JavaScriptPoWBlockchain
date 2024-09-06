@@ -1,68 +1,29 @@
 const path = require('path');
-const fs = require('fs');
+const { createLogger, format, transports } = require('winston');
 require('dotenv').config();
 
 const port = process.env.PORT;
-const logPath = process.env.LOGFILE_PATH;
+const logDirPath = process.env.LOG_DIR_PATH;
+const fileName = process.env.LOGFILE_NAME || 'blockchain-node.log';
 
-if (!port || !logPath) {
-    throw new Error ('Missing environment variables: PORT or LOGFILE_PATH');
+if (!port || !logDirPath) {
+    throw new Error ('Missing environment variables: PORT or LOG_DIR_PATH');
 }
 
-//open log stream, and do not close it until application is shut down
-const logStream = fs.createWriteStream(`${logPath}/logs-${port}.txt`, { flags: 'a' });
+const logFilePath = path.join(logDirPath, fileName);
 
-function logToFile(message) {
-    const timestamp = new Date().toISOString();
-    const callerInfo = getCallerInfo();
-    logStream.write(`[${timestamp}] [${callerInfo}] ${message}\n`); 
-}
-
-const logger = {
-    info: (message) => logToFile(`[INFO] ${message}`),
-    warn: (message) => logToFile(`[WARN] ${message}`),
-    error: (message) => logToFile(`[ERROR] ${message}`),
-};
-
-// Handle application shutdown to close the log stream properly
-function handleShutdown() {
-    logStream.end(() => {
-        logToFile('Log stream closed.');
-    });
-}
-
-function getCallerInfo() {
-    const originalFunc = Error.prepareStackTrace;
-
-    try {
-        const err = new Error();
-        Error.prepareStackTrace = (_, stack) => stack;
-        const stack = err.stack;
-        const caller = stack[3]; // Stack[2] is the caller of the logging function
-        const fileName = path.basename(caller.getFileName());
-        const lineNumber = caller.getLineNumber();
-        const functionName = caller.getFunctionName() || 'anonymous function';
-        return `${fileName}:${lineNumber} (${functionName})`;
-    } catch (e) {
-        return `unknown location ${e}`;
-    } finally {
-        Error.prepareStackTrace = originalFunc;
-    }
-}
-
-// Listen for process termination signals from Node and the exit event
-process.on('exit', handleShutdown ); // Normal exit
-
-process.on('SIGINT', () => {
-    logToFile('Received SIGINT. Shutting down...');
-    handleShutdown();
-    process.exit(); // Exit explicitly after closing the stream
+// Create the Winston logger
+const logger = createLogger({
+  level: 'info',  // Set the log level
+  format: format.combine(
+    format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),  // Add timestamps
+    format.json()  // Log in JSON format
+  ),
+  transports: [
+    new transports.Console(),  // Output to console
+    new transports.File({ filename: logFilePath })  // Output to file
+  ],
 });
 
-process.on('SIGTERM', () => {
-    logToFile('Received SIGTERM. Shutting down...');
-    handleShutdown();
-    process.exit(); // Exit explicitly after closing the stream
-});
 
 module.exports = logger;
