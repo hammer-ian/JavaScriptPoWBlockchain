@@ -12,18 +12,45 @@ if (!port || !logDirPath) {
 
 const logFilePath = path.join(logDirPath, fileName);
 
+// Custom format to get the file and line number
+const getCaller = format((info) => {
+  const stack = new Error().stack.split('\n');
+
+  // Loop through the stack to find the first caller that isn't from node_modules
+  for (let i = 4; i < stack.length; i++) {
+    const logOrigin = stack[i].match(/\((.*):(\d+):\d+\)/);
+    if (logOrigin && !logOrigin[1].includes('node_modules') && !logOrigin[1].includes('internal')) {
+      info.file = logOrigin[1]; // File name
+      info.line = logOrigin[2]; // Line number
+      break;
+    }
+  }
+
+  return info;
+});
+
 // Create the Winston logger
 const logger = createLogger({
   level: 'info',  // Set the log level
   format: format.combine(
+    getCaller(), //Add filename and line number 
     format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),  // Add timestamps
-    format.json()  // Log in JSON format
+    format.json()
   ),
   transports: [
-    new transports.Console(),  // Output to console
     new transports.File({ filename: logFilePath })  // Output to file
   ],
 });
 
+
+function signalHandler(signal) {
+    // do some stuff here
+    logger.info(`${signal} received. Terminating blockchain node`);
+    process.exit()
+}
+
+process.on('SIGINT', signalHandler);
+process.on('SIGTERM', signalHandler);
+process.on('SIGQUIT', signalHandler);
 
 module.exports = logger;
