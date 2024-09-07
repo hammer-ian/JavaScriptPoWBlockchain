@@ -67,6 +67,7 @@ function makeNetworkNodeURL(){
 
     const networkNodeURL = `http://${networkNodeIP}:${networkNodePort}`;
     logger.info(`Network node URL is ${networkNodeURL}`);
+    logger.setNetworkNode(`${networkNodeURL}`);
 
     return networkNodeURL;
 }
