@@ -11,13 +11,13 @@
 
 //Import 3rd Party Imports
 const rp = require('request-promise'); //manage internal HTTP requests
-const { networkInterfaces } = require('os'); //access host network info
 const { v4: uuidv4 } = require('uuid'); //generate unique identifiers
 const nodeAddress = uuidv4().split('-').join('');
 
 //Import environment config and internal modules
 require('dotenv').config();
 const logger = require('./utils/logger');
+const { getNetworkNodeDetails } = require('./utils/appUtils');
 const Blockchain = require('./blockchain');
 const { registerThisNode, findUnhealthyNode } = require('./nodeRegistration');
 
@@ -43,50 +43,16 @@ app.use((req, res, next) => {
     }
 });
 
-let networkNodeIP, networkNodePort;
-//create this nodes networkURL using host ip and port (note, port must be passed as the first param to the script)
-function makeNetworkNodeURL() {
-
-    const nets = networkInterfaces();
-    const results = Object.create(null); // Or just '{}', an empty object
-
-    for (const name of Object.keys(nets)) {
-        for (const net of nets[name]) {
-            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
-            // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
-            const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
-            if (net.family === familyV4Value && !net.internal) {
-                if (!results[name]) {
-                    results[name] = [];
-                }
-                results[name].push(net.address);
-            }
-        }
-    }
-    if (process.env.ENVIRONMENT === 'PROD' || !process.env.ENVIRONMENT) {
-        //get ip from Linux filesystem
-        networkNodeIP = results['enX0'][0];
-    } else networkNodeIP = process.env.ENVIRONMENT_TEMP_IP;
-
-    //read PORT from .env configuration file 
-    networkNodePort = process.env.PORT;
-
-    const networkNodeURL = `http://${networkNodeIP}:${networkNodePort}`;
-    logger.info(`Network node URL is ${networkNodeURL}`);
-    logger.setNetworkNode(`${networkNodeURL}`);
-
-    return networkNodeURL;
-}
-
 //create this nodes blockchain instance
-const blockchain = new Blockchain(makeNetworkNodeURL());
+const networkNodeDetails = getNetworkNodeDetails();
+const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 
 /**********************************
   
     Endpoints definitions
 
 **************************************/
-// Pass the blockchain instance to the route
+// Pass the blockchain instance to the Explorer route
 app.use('/explorer', explorerRoutes(blockchain));
 
 app.get('/', function (req, res) {
@@ -397,9 +363,9 @@ app.get('/consensus', function (req, res) {
 });
 
 //Start listening for new requests on all IP addresses
-app.listen(networkNodePort, '0.0.0.0', function () {
+app.listen(networkNodeDetails.networkNodePort, '0.0.0.0', function () {
 
-    registerThisNode(blockchain, networkNodeIP);
-    logger.info(`Listening on port ${networkNodePort}..`);
+    registerThisNode(blockchain, networkNodeDetails.networkNodeIP);
+    logger.info(`Listening on port ${networkNodeDetails.networkNodePort}..`);
 
 });

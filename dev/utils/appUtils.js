@@ -1,62 +1,53 @@
-// appUtils.js
-
 //import 3rd party libraries
-const http = require('http');
+const { networkInterfaces } = require('os'); //access host network info
+require('dotenv').config();
 
 //import internal modules
 const logger = require('./logger');
 
+//create networkNode URL using information from the host
+const getNetworkNodeDetails = () => {
 
-//Generic function to check port health.
-const checkPortHealth = async (hostname, port) => {
-    try {
-        logger.info(`Checking health of ${hostname}:${port}`); 
-	
-	// Return a new Promise that checks the port's health. Promise resolves to true
-        return await new Promise((resolve, reject) => {
-            // Build healthcheck HTTP request
-            const options = {
-                hostname: hostname, 
-                port: port,
-                path: '/',
-                method: 'GET',
-                timeout: 2000
-            };
+    logger.info(`Setting Network node URL`);
+    let networkNodeIP;
+    const nets = networkInterfaces();
+    const results = Object.create(null); // Or just '{}', an empty object
 
-            // Execute HTTP healthcheck
-            const req = http.request(options, (res) => {
-                // Explicitly check if the response status code is 200 (OK)
-                if (res.statusCode === 200) {
-                    logger.info(`Healthcheck passed for ${hostname}:${port}`); 
-		    resolve(true);  // Resolve the Promise with true if the port is healthy
-                } else {
-		    resolve(false); // Resolve the Promise with false if the port is not healthy
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+            // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
+            const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
+            if (net.family === familyV4Value && !net.internal) {
+                if (!results[name]) {
+                    results[name] = [];
                 }
-            });
-
-            // Listen for an error event on the request
-            req.on('error', (err) => {
-                // If an error occurs, reject the Promise with the error
-                reject(err);
-            });
-
-            // End the request, signaling that the request is complete
-            req.end();
-        });
-    } catch (err) {
-        
-	logger.error(`Health check failed for ${hostname}:${port} - ${err.message}`);
-        // Return false, port is not healthy
-        return false;
+                results[name].push(net.address);
+            }
+        }
     }
-};
+    if (process.env.ENVIRONMENT === 'PROD' || !process.env.ENVIRONMENT) {
+        //get ip from Linux filesystem
+        networkNodeIP = results['enX0'][0];
+    } else {
+        networkNodeIP = process.env.ENVIRONMENT_TEMP_IP;
+    }
 
-const makeNetworkNodeURL = (ip, port) => {
-    return `http://${ip}:${port}`;
+    //read PORT from .env configuration file 
+    const networkNodePort = process.env.PORT;
+
+    const networkNodeURL = `http://${networkNodeIP}:${networkNodePort}`;
+    logger.info(`Network node URL is ${networkNodeURL}`);
+    logger.setNetworkNode(`${networkNodeURL}`);
+
+    return {
+        networkNodeIP: networkNodeIP,
+        networkNodePort: networkNodePort,
+        networkNodeURL: networkNodeURL
+    };
 };
 
 module.exports = {
-    checkPortHealth//,
-    //makeNetworkNodeURL
+    getNetworkNodeDetails
 };
 
