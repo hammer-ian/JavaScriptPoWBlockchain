@@ -12,12 +12,11 @@ const fileName = process.env.LOGFILE_NAME || 'blockchain-node.log';
 const logtail = new Logtail(process.env.BETTER_STACK_SOURCE);
 
 if (!port || !logDirPath) {
-    throw new Error ('Missing environment variables: PORT or LOG_DIR_PATH');
+  throw new Error('Missing environment variables: PORT or LOG_DIR_PATH');
 }
 
 const logFilePath = path.join(logDirPath, fileName);
 
-// Custom format to get the file and line number
 const getCaller = format((info) => {
   const stack = new Error().stack.split('\n');
 
@@ -25,7 +24,8 @@ const getCaller = format((info) => {
   for (let i = 4; i < stack.length; i++) {
     const logOrigin = stack[i].match(/\((.*):(\d+):\d+\)/);
     if (logOrigin && !logOrigin[1].includes('node_modules') && !logOrigin[1].includes('internal')) {
-      info.file = logOrigin[1]; // File name
+      const fullPath = logOrigin[1];
+      info.file = path.basename(fullPath); // Extract just the filename from the full path
       info.line = logOrigin[2]; // Line number
       break;
     }
@@ -57,9 +57,9 @@ logger.setNetworkNode = function (networkNodeURL) {
 };
 
 function signalHandler(signal) {
-    // do some stuff here
-    logger.info(`${signal} received. Terminating blockchain node`);
-    process.exit()
+  // do some stuff here
+  logger.info(`${signal} received. Terminating blockchain node`);
+  process.exit()
 }
 
 process.on('SIGINT', signalHandler);

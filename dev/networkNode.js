@@ -4,8 +4,7 @@
  *  multiple AWS EC2 instances, creating a network of blockchain nodes
  *
  *  Each network node will listen on the port specified in .env
- *  This script assumes all nodes in the network use the same port
- *  
+ *    
  *  Script usage: networkNode.js 
  *
  * *******************************************************************/
@@ -29,13 +28,16 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }))
 
+//Express Routes
+const explorerRoutes = require('./routes/explorerRoutes');
+
 // logger middleware to log access logs
 app.use((req, res, next) => {
 
     //Temp fix to filter out AWS TargetGroup health checks and reduce log noise 
-    if (req.path === '/healthcheck'){
+    if (req.path === '/healthcheck') {
         return next();
-    }else {
+    } else {
         logger.info(`${req.method} ${req.hostname} ${req.path} ${JSON.stringify(req.body)}`);
         next();
     }
@@ -43,7 +45,7 @@ app.use((req, res, next) => {
 
 let networkNodeIP, networkNodePort;
 //create this nodes networkURL using host ip and port (note, port must be passed as the first param to the script)
-function makeNetworkNodeURL(){
+function makeNetworkNodeURL() {
 
     const nets = networkInterfaces();
     const results = Object.create(null); // Or just '{}', an empty object
@@ -61,7 +63,11 @@ function makeNetworkNodeURL(){
             }
         }
     }
-    networkNodeIP = results['enX0'][0];
+    if (process.env.ENVIRONMENT === 'PROD' || !process.env.ENVIRONMENT) {
+        //get ip from Linux filesystem
+        networkNodeIP = results['enX0'][0];
+    } else networkNodeIP = process.env.ENVIRONMENT_TEMP_IP;
+
     //read PORT from .env configuration file 
     networkNodePort = process.env.PORT;
 
@@ -73,13 +79,16 @@ function makeNetworkNodeURL(){
 }
 
 //create this nodes blockchain instance
-const blockchain = new Blockchain( makeNetworkNodeURL() );
+const blockchain = new Blockchain(makeNetworkNodeURL());
 
 /**********************************
   
     Endpoints definitions
 
 **************************************/
+// Pass the blockchain instance to the route
+app.use('/explorer', explorerRoutes(blockchain));
+
 app.get('/', function (req, res) {
     res.send("Homepage");
 });
@@ -245,10 +254,10 @@ app.post('/register-and-broadcast-node', function (req, res) {
     If any of the input Promises reject/fail, the allPromise rejects immediately */
     Promise.all(registerNodePromises) //register requests executed here
         .then(data => {
-            logger.info('Finished broadcasting request of new node to other nodes, creating bulk registration back to new node'); 
+            logger.info('Finished broadcasting request of new node to other nodes, creating bulk registration back to new node');
 
-	    /*Now the new node is registered, we need to tell the NEW node about ALL the other nodes
-            this endpoint is only hit on the NEW node instance */
+            /*Now the new node is registered, we need to tell the NEW node about ALL the other nodes
+                this endpoint is only hit on the NEW node instance */
             const bulkRegisterOptions = {
                 uri: newNodeURL + '/internal/register-nodes-bulk',
                 method: 'POST',
@@ -258,7 +267,7 @@ app.post('/register-and-broadcast-node', function (req, res) {
 
             return rp(bulkRegisterOptions);
         })
-	.catch(err => logger.info(err))
+        .catch(err => logger.info(err))
         .then(data => {
             res.json({ note: 'New node registered with network successfully' });
         });
@@ -306,27 +315,27 @@ app.get('/find-unhealthy-node', function (req, res) {
     logger.warn('Request received to find unhealthy node');
     findUnhealthyNode(blockchain.networkNodes);
 
-    res.json({ 
+    res.json({
         note: `Request received to find unhealthy node. Working on it`,
         receivingNode: `${blockchain.currentNodeUrl}`
     });
 });
 
-app.post('/internal/deregister-unhealthy-node', function (req, res){
+app.post('/internal/deregister-unhealthy-node', function (req, res) {
 
     //remove the unhealthy node(s) from the list of network nodes
     logger.info(`Request received to deregister ${req.body.unhealthyNodes}`);
 
     const unhealthyNodes = req.body.unhealthyNodes;
 
-    for (const unhealthyNode of unhealthyNodes){
+    for (const unhealthyNode of unhealthyNodes) {
         const index = blockchain.networkNodes.indexOf(unhealthyNode);
-        if (index !== -1) blockchain.networkNodes.splice(index,1);
-    } 
+        if (index !== -1) blockchain.networkNodes.splice(index, 1);
+    }
 
     res.json({
         note: "Unhealthy nodes removed from my networkNode list",
-	updatedNetworkNodeList: blockchain.networkNodes
+        updatedNetworkNodeList: blockchain.networkNodes
     });
 });
 
@@ -385,43 +394,6 @@ app.get('/consensus', function (req, res) {
                 });
             }
         });
-});
-
-//find transaction associated with a specific hash
-app.get('/block/:blockHash', function (req, res) {
-    const searchResults = blockchain.getBlock(req.params.blockHash);
-    res.json({
-        note: "Search finished",
-        block: searchResults
-    })
-
-});
-//find a transaction by transaction id
-app.get('/transaction/:transactionId', function (req, res) {
-
-    const searchResults = blockchain.getTransaction(req.params.transactionId);
-
-    res.json({
-        note: "Search finished",
-        blockIndex: searchResults.block,
-        transaction: searchResults.transaction
-    })
-});
-
-//get all transactions associated with an address
-app.get('/address/:address', function (req, res) {
-
-    const searchResults = blockchain.getAddress(req.params.address);
-
-    res.json({
-        note: "Search finished",
-        addressData: searchResults
-    })
-
-});
-
-app.get('/block-explorer', function (req, res) {
-    res.sendFile('./block-explorer/index.html', { root: __dirname });
 });
 
 //Start listening for new requests on all IP addresses
