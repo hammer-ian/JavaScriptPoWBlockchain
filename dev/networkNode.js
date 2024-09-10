@@ -29,8 +29,9 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }))
 
-//Express Routes
+//Import Route files
 const explorerRoutes = require('./routes/explorerRoutes');
+const accountRoutes = require('./routes/accountRoutes');
 
 // logger middleware to log access logs
 app.use((req, res, next) => {
@@ -44,7 +45,7 @@ app.use((req, res, next) => {
     }
 });
 
-//create this nodes blockchain instance
+//initialize this nodes blockchain instance
 const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 
@@ -53,8 +54,9 @@ const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
     Endpoints definitions
 
 **************************************/
-// Pass the blockchain instance to the Explorer route
+// Set up application Routes
 app.use('/explorer', explorerRoutes(blockchain));
+app.use('/account', accountRoutes(blockchain));
 
 app.get('/', function (req, res) {
     res.send("Homepage");
@@ -74,31 +76,45 @@ app.get('/healthcheck', async (req, res) => {
 //create new transaction Obj and broadcast new transaction to other network nodes
 app.post('/transaction/broadcast', function (req, res) {
     logger.info('Received transaction to broadcast, creating new transaction object');
-    const newTransaction = blockchain.createNewTransaction(req.body.amount, req.body.sender, req.body.recipient);
-    logger.info(`newTransaction object created ${JSON.stringify(newTransaction)}`);
-    //add new transaction object to the pending list on THIS instance
-    blockchain.addNewTransactionToPendingTransactions(newTransaction);
-    logger.info('Transaction added to list of pending transactions');
-    //Array to hold the new transaction broadcast requests to be send to other nodes
-    const requestTxnPromises = [];
+    const resultObj = blockchain.createNewTransaction(
+        req.body.debitAddress,
+        req.body.creditAddress,
+        req.body.amount
+    );
 
-    //build the "new transaction" broadcast request for each of the other nodes
-    blockchain.networkNodes.forEach(networkNodeUrl => {
-        const requestOptions = {
-            uri: networkNodeUrl + '/internal/receive-new-transaction',
-            method: 'POST',
-            body: newTransaction,
-            json: true
-        };
-        //add each new transaction request to array
-        requestTxnPromises.push(rp(requestOptions));
-    });
+    //if returning object has a transaction ID property, transaction created successfully
+    if (resultObj.txnID) {
+        logger.info(`newTransaction object created ${JSON.stringify(resultObj)}`);
+        //add new transaction object to the pending list on THIS instance
 
-    Promise.all(requestTxnPromises)
-        .then(data => {
-            res.json({ note: "new transaction created and broadcast successfully" });
+        blockchain.addNewTransactionToPendingTransactions(resultObj);
+        logger.info('Transaction added to list of pending transactions');
+        //Array to hold the new transaction broadcast requests to be send to other nodes
+        const requestTxnPromises = [];
+
+        //build the "new transaction" broadcast request for each of the other nodes
+        blockchain.networkNodes.forEach(networkNodeUrl => {
+            const requestOptions = {
+                uri: networkNodeUrl + '/internal/receive-new-transaction',
+                method: 'POST',
+                body: resultObj,
+                json: true
+            };
+            //add each new transaction request to array
+            requestTxnPromises.push(rp(requestOptions));
         });
 
+        Promise.all(requestTxnPromises)
+            .then(data => {
+                res.json({ note: "new transaction created and broadcast successfully" });
+            });
+    } else {
+        logger.info(`Transaction creation failed ${JSON.stringify(resultObj)}`);
+        res.json({
+            note: "transaction creation failed",
+            result: resultObj
+        });
+    }
 });
 
 //used to receive new transactions from other network nodes

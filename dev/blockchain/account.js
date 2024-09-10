@@ -3,13 +3,13 @@ const { v4: uuidv4 } = require('uuid');
 
 //Import internal modules
 const logger = require('../utils/logger');
-const Blockchain = require('./blockchain');
 
 class Account {
 
-    constructor(blockchain) {
+    constructor(nickname) {
+        this.nickname = nickname;
         this.balance = 0; //initial amount
-        this.accountid = uuidv4().split('-').join(''); //create account id  
+        this.address = uuidv4().split('-').join(''); //create account id  
     }
 
     //private methods "#"
@@ -17,6 +17,10 @@ class Account {
         const prevBalance = this.balance;
         this.balance += amount;
         logger.info(`Act: ${this.accountid} : Balance updated from:${prevBalance} to:${this.balance}`);
+    }
+
+    getBalance() {
+        return this.balance;
     }
 
     debit(amount) {
@@ -28,10 +32,6 @@ class Account {
             logger.info(`Act: ${this.accountid}: Debit failed`);
             return false;
         }
-    }
-
-    getBalance() {
-        return this.balance;
     }
 
     debitCheck(amount) {
@@ -51,3 +51,5 @@ class Account {
     }
 
 }
+
+module.exports = Account;

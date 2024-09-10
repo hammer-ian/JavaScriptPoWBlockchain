@@ -10,6 +10,7 @@ const Account = require('./account');
 function Blockchain(networkNodeURL) {
 
     this.pendingTransactions = []; //pending unvalidated blockchain transactions
+    this.accounts = []; //list of accounts created on the blockchain
     this.chain = []; //complete validated transactions committed to chain
 
     //the url for this instance of the network node
@@ -21,15 +22,52 @@ function Blockchain(networkNodeURL) {
     this.createNewBlock(100, 'NA', 'genesisHash');
 }
 
-Blockchain.prototype.createNewTransaction = function (amount, sender, recipient) {
+Blockchain.prototype.createNewAccount = function (nickname) {
 
-    const newTxn = {
-        txnID: uuidv4().split('-').join(''),
-        amount: amount,
-        sender: sender,
-        recipient: recipient
+    const newAccount = new Account(nickname);
+    this.accounts.push(newAccount);
+    return newAccount;
+}
+
+Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddress, amount) {
+
+    //check debitAcc and creditAcc addresses exist
+    const debitAddressObj = this.accounts.find(account => account.address === debitAddress);
+    const creditAddressObj = this.accounts.find(account => account.address === creditAddress);
+
+    if (debitAddressObj && creditAddressObj) {
+        logger.info(`Addresses found: Debit: ${debitAddressObj.address}, Credit: ${creditAddressObj.address}`);
+    } else {
+        logger.info(`Address(es) not found. 
+            Debit address Exists: ${!!debitAddressObj}, Credit address Exists: ${!!creditAddressObj}
+            Transaction aborted`);
+
+        const errorObj = {
+            Error: `address check failed`,
+            DebitAddress: `${!!debitAddressObj} `,
+            CreditAddress: `${!!creditAddressObj} `
+        }
+        return errorObj;
     }
-    return newTxn;
+
+    //check debit address has sufficient funds
+    if (debitAddressObj.debitCheck(amount)) {
+
+        //if no checks fail create txn object
+        const newTxn = {
+            txnID: uuidv4().split('-').join(''),
+            debitAddress: debitAddress,
+            creditAddress: creditAddress,
+            amount: amount
+        }
+        return newTxn;
+    } else {
+        logger.info(`debitCheck failed: insufficient funds in ${debitAddressObj.address} `)
+        const errorObj = {
+            Error: `debitCheck failed: insufficient funds in ${debitAddressObj.address} `
+        }
+        return errorObj;
+    }
 }
 
 Blockchain.prototype.addNewTransactionToPendingTransactions = function (transactionObj) {
@@ -37,7 +75,7 @@ Blockchain.prototype.addNewTransactionToPendingTransactions = function (transact
     //add new transaction to list of pending txns, as it's not yet been validated
     this.pendingTransactions.push(transactionObj);
     //return the index of the block this transaction will get mined in i.e. the next block
-    return this.getLastBlock()['index'] + 1;
+    return result;
 }
 
 Blockchain.prototype.getLastBlock = function () {
@@ -104,7 +142,7 @@ Blockchain.prototype.chainIsValid = function (blockchain) {
 
         //check chain "links" are correct - compare current block prevHash to previous block's hash
         if (currentBlock['prevBlockHash'] !== prevBlock['hash']) {
-            logger.info(`FAIL: Issue with chain linking. current block prevHash is ${currentBlock['prevBlockHash']}, previous block hash is ${prevBlock['hash']}`);
+            logger.info(`FAIL: Issue with chain linking.current block prevHash is ${currentBlock['prevBlockHash']}, previous block hash is ${prevBlock['hash']} `);
             chainValid = false;
         }
 

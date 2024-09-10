@@ -16,6 +16,7 @@ module.exports = (blockchain) => {
         })
 
     });
+
     //find a transaction by transaction id
     router.get('/transaction/:transactionId', function (req, res) {
         logger.info(`Request received to find transaction ${req.params.transactionId}`);
