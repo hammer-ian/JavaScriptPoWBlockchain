@@ -365,7 +365,7 @@ app.get('/consensus', function (req, res) {
 //Start listening for new requests on all IP addresses
 app.listen(networkNodeDetails.networkNodePort, '0.0.0.0', function () {
 
-    registerThisNode(blockchain, networkNodeDetails.networkNodeIP);
+    registerThisNode(networkNodeDetails);
     logger.info(`Listening on port ${networkNodeDetails.networkNodePort}..`);
 
 });
