@@ -18,7 +18,7 @@ const nodeAddress = uuidv4().split('-').join('');
 require('dotenv').config();
 const logger = require('./utils/logger');
 const { getNetworkNodeDetails } = require('./utils/appUtils');
-const Blockchain = require('./blockchain');
+const Blockchain = require('./blockchain/blockchain');
 const { registerThisNode, findUnhealthyNode } = require('./nodeRegistration');
 
 //Set up express server

@@ -2,7 +2,7 @@
 const { v4: uuidv4 } = require('uuid');
 
 //Import internal modules
-const logger = require('./utils/logger');
+const logger = require('../utils/logger');
 const Blockchain = require('./blockchain');
 
 class Account {

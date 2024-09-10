@@ -1,7 +1,10 @@
 //requried for logging
-const logger = require('./utils/logger');
+const logger = require('../utils/logger');
 const sha256 = require('sha256');
 const { v4: uuidv4 } = require('uuid');
+
+//Internal modules
+const BlockChainExplorer = require('./blockchainExplorer');
 const Account = require('./account');
 
 function Blockchain(networkNodeURL) {
@@ -133,52 +136,9 @@ Blockchain.prototype.chainIsValid = function (blockchain) {
     return chainValid;
 }
 
-Blockchain.prototype.getBlock = function (blockHashToFind) {
-
-    let correctBlock = null;
-    this.chain.forEach(block => {
-        if (block.hash === blockHashToFind) correctBlock = block;
-    });
-    return correctBlock;
-}
-
-Blockchain.prototype.getTransaction = function (transactionId) {
-    logger.info("Searching for transaction: ", transactionId);
-    let correctBlock, correctTransaction = null;
-    this.chain.forEach(block => {
-        block.transactions.forEach(transaction => {
-            if (transaction.txnID === transactionId) {
-                correctTransaction = transaction;
-                correctBlock = block;
-            };
-        });
-    });
-    return {
-        block: correctBlock,
-        transaction: correctTransaction
-    };
-}
-
-Blockchain.prototype.getAddress = function (addressToFind) {
-    logger.info("Searching for transactions associated with: ", addressToFind);
-    const matchingTransactions = [];
-    let addressBalance = 0;
-    this.chain.forEach(block => {
-        block.transactions.forEach(transaction => {
-            logger.info(transaction.sender, " ", transaction.recipient, " ", addressToFind)
-            if ((transaction.sender === addressToFind) || (transaction.recipient === addressToFind)) {
-                matchingTransactions.push(transaction);
-
-                //now calculate address balance
-                if (transaction.recipient === addressToFind) addressBalance += transaction.amount;
-                if (transaction.sender == addressToFind) addressBalance -= transaction.amount;
-            };
-        });
-    });
-    return {
-        addressBalance: addressBalance,
-        addressTransactions: matchingTransactions
-    };
-}
+//Methods specific to Blockchain Explorer
+Blockchain.prototype.getBlock = BlockChainExplorer.getBlock;
+Blockchain.prototype.getTransaction = BlockChainExplorer.getTransaction;
+Blockchain.prototype.getAddress = BlockChainExplorer.getAddress;
 
 module.exports = Blockchain;
