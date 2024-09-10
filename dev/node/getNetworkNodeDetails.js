@@ -3,7 +3,7 @@ const { networkInterfaces } = require('os'); //access host network info
 require('dotenv').config();
 
 //import internal modules
-const logger = require('./logger');
+const logger = require('../utils/logger');
 
 //create networkNode URL using information from the host
 const getNetworkNodeDetails = () => {

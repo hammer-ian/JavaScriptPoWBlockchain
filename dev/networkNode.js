@@ -17,9 +17,10 @@ const nodeAddress = uuidv4().split('-').join('');
 //Import environment config and internal modules
 require('dotenv').config();
 const logger = require('./utils/logger');
-const { getNetworkNodeDetails } = require('./utils/appUtils');
+const { getNetworkNodeDetails } = require('./node/getNetworkNodeDetails');
+const { registerThisNode } = require('./node/registerThisNode');
+const { deRegisterUnhealthyNodes } = require('./node/deregisterUnhealthyNodes');
 const Blockchain = require('./blockchain/blockchain');
-const { registerThisNode, findUnhealthyNode } = require('./nodeRegistration');
 
 //Set up express server
 const express = require('express');
@@ -279,7 +280,7 @@ app.post('/internal/register-nodes-bulk', function (req, res) {
 app.get('/find-unhealthy-node', function (req, res) {
 
     logger.warn('Request received to find unhealthy node');
-    findUnhealthyNode(blockchain.networkNodes);
+    deRegisterUnhealthyNodes(blockchain.networkNodes);
 
     res.json({
         note: `Request received to find unhealthy node. Working on it`,
