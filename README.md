@@ -62,10 +62,10 @@ Detailed Activity Log Of Completed Work:
 
 **New Blockchain Features**
 * Added multi host capability
-* Fully automated the start and stop of a blockchain node. This means the blockchain network automatically scales as new nodes are brought on/offline
-  * Automated the start and registration of a new node with the blockchain network when a new EC2 instance starts
-  * Automated the consensus check when a node starts so new nodes get the latest copy of the blockchain
-  * Automated de-registration of “stopped/unhealthy” nodes from blockchain network 
+* Automated the start and stop of a blockchain node. This means the blockchain network automatically scales as new nodes are brought on/offline including the:
+  * discovery of the blockchain network and registration of a new node when a new EC2 instance starts
+  * consensus check when a node starts so new nodes get the latest copy of the blockchain
+  * de-registration of “stopped/unhealthy” nodes from blockchain network 
     * ELB/Target Group healthcheck detects host/node is not responding -> 
     * CloudWatch Alarm fired -> invokes 1st Lambda (outside VPC)
     * Lambda 1 queries ELB to find a healthy node -> passes details to 2nd Lambda inside VPC
