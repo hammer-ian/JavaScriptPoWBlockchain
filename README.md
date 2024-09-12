@@ -45,7 +45,7 @@ Detailed Activity Log Of Completed Work:
 
 **V1**
 
-**Project & AWS infrastructure**
+**New Project & AWS infrastructure Features**
 * Set up github repo
 * Created initial EC2 build e.g. Apache, Node
 * Implemented Apache Proxy to make blockchain (hosted on internal Express.js server) accessible from public internet
@@ -56,12 +56,13 @@ Detailed Activity Log Of Completed Work:
 * Added swapspace as a workaround for limited t2.micro RAM
 * Private subnet and routing tables created for non-public facing EC2 instances
 * Finalized AMI Image of master blockchain node
+* Environment variables
 * Migrated from basic string based logging to 3rd party logger Winston
 * Deployed Prometheus to collect metrics, and onboarded logs/metrics to centralized aggregator
 
 **New Blockchain Features**
-* Added multi host capability (initial version only supported multiples nodes on a single host)
-* Fully automated the start and stop of a blockchain node. This means the blockchain network automatically scales as new EC2 instances/nodes are brought on/offline
+* Added multi host capability
+* Fully automated the start and stop of a blockchain node. This means the blockchain network automatically scales as new nodes are brought on/offline
   * Automated the start and registration of a new node with the blockchain network when a new EC2 instance starts
   * Automated the consensus check when a node starts so new nodes get the latest copy of the blockchain
   * Automated de-registration of “stopped/unhealthy” nodes from blockchain network 
