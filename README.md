@@ -59,7 +59,7 @@ Detailed Activity Log Of Completed Work:
 * Migrated from basic string based logging to 3rd party logger Winston
 * Deployed Prometheus to collect metrics, and onboarded logs/metrics to centralized aggregator
 
-**Additional Blockchain Features**
+**New Blockchain Features**
 * Added multi host capability (initial version only supported multiples nodes on a single host)
 * Fully automated the start and stop of a blockchain node. This means the blockchain network automatically scales as new EC2 instances/nodes are brought on/offline
   * Automated the start and registration of a new node with the blockchain network when a new EC2 instance starts
@@ -78,7 +78,7 @@ Detailed Activity Log Of Completed Work:
 **Project & AWS Infrastructure**
 TBC
 
-**Blockchain Features**
+**New Blockchain Features**
 * Implemented JSON schema validation for POST requests
 * Implemented Account model to enabled “state” to be maintained on blockchain
 * Account debit checks: Account address and debit validations
