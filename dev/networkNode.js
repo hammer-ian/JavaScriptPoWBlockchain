@@ -12,7 +12,6 @@
 //Import 3rd Party Imports
 const rp = require('request-promise'); //manage internal HTTP requests
 const { v4: uuidv4 } = require('uuid'); //generate unique identifiers
-const nodeAddress = uuidv4().split('-').join('');
 
 //Import environment config and internal modules
 require('dotenv').config();
@@ -33,6 +32,9 @@ app.use(bodyParser.urlencoded({ extended: false }))
 const explorerRoutes = require('./routes/explorerRoutes');
 const accountRoutes = require('./routes/accountRoutes');
 
+//Import JSON schemas
+const { validateTransactionJSON } = require('./node/schema');
+
 // logger middleware to log access logs
 app.use((req, res, next) => {
 
@@ -45,9 +47,11 @@ app.use((req, res, next) => {
     }
 });
 
-//initialize this nodes blockchain instance
+//initialize this node and it's blockchain instance
 const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
+const nodeId = `node-${uuidv4().split('-').join('')}`; //generate unique node id
+const nodeAcc = blockchain.createNewAccount(nodeId);
 
 /**********************************
   
@@ -74,21 +78,21 @@ app.get('/healthcheck', async (req, res) => {
 });
 
 //create new transaction Obj and broadcast new transaction to other network nodes
-app.post('/transaction/broadcast', function (req, res) {
+app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) {
     logger.info('Received transaction to broadcast, creating new transaction object');
+
     const resultObj = blockchain.createNewTransaction(
         req.body.debitAddress,
         req.body.creditAddress,
-        req.body.amount
+        req.body.amount,
+        req.body.gas,
+        req.body.nonce
     );
 
     //if returning object has a transaction ID property, transaction created successfully
     if (resultObj.txnID) {
         logger.info(`newTransaction object created ${JSON.stringify(resultObj)}`);
-        //add new transaction object to the pending list on THIS instance
 
-        blockchain.addNewTransactionToPendingTransactions(resultObj);
-        logger.info('Transaction added to list of pending transactions');
         //Array to hold the new transaction broadcast requests to be send to other nodes
         const requestTxnPromises = [];
 
@@ -119,10 +123,21 @@ app.post('/transaction/broadcast', function (req, res) {
 
 //used to receive new transactions from other network nodes
 app.post('/internal/receive-new-transaction', function (req, res) {
-    logger.info(`New transaction request received ${JSON.stringify(req.body)}`);
-    const newTransaction = req.body;
-    const blockIndex = blockchain.addNewTransactionToPendingTransactions(newTransaction);
-    res.json({ note: `transaction will be added in block ${blockIndex}`, respondingNode: `${blockchain.currentNodeUrl}` });
+    logger.info(`New transaction received, validating ${JSON.stringify(req.body)}`);
+    const newTxnObj = req.body;
+    const resultObj = blockchain.validateTransaction(
+        newTxnObj.debitAddress,
+        newTxnObj.creditAddress,
+        newTxnObj.amount,
+        newTxnObj.gas,
+        newTxnObj.nonce
+    );
+    if (resultObj.ValidTxn) {
+        blockchain.addNewTransactionToPendingPool(newTxnObj);
+        res.json({ note: `transaction added to pending pool, respondingNode: ${blockchain.currentNodeUrl}` });
+    } else {
+        res.json({ note: `transaction validation failed, txn not added to pending pool: ${resultObj}` });
+    }
 });
 
 app.get('/mine', function (req, res) {
@@ -133,7 +148,7 @@ app.get('/mine', function (req, res) {
 
     const nonce = blockchain.proofOfWork(prevBlockHash, blockchain.pendingTransactions);
     const currentBlockHash = blockchain.hashBlockData(prevBlockHash, blockchain.pendingTransactions, nonce);
-    const newBlock = blockchain.createNewBlock(nonce, prevBlockHash, currentBlockHash);
+    const newBlock = blockchain.createNewBlock(nonce, prevBlockHash, currentBlockHash, nodeAcc.address);
 
     const registerNewBlockPromises = [];
 
@@ -150,21 +165,6 @@ app.get('/mine', function (req, res) {
     });
 
     Promise.all(registerNewBlockPromises)
-        .then(data => {
-            //once new block has been broadcast, create a mining reward transaction (to be mined in the next block)
-            //mining rewards being added to the following block is considered best practice and how bitcoin operates
-            const requestOptions = {
-                url: blockchain.currentNodeUrl + '/transaction/broadcast',
-                method: 'POST',
-                body: {
-                    amount: 12.5,
-                    sender: "00",
-                    recipient: nodeAddress
-                },
-                json: true
-            };
-            return rp(requestOptions);
-        })
         .then(data => {
             res.json({
                 note: "new block mined and broadcast successfully",

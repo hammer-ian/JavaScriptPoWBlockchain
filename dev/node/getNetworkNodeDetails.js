@@ -26,10 +26,12 @@ const getNetworkNodeDetails = () => {
             }
         }
     }
+    //if in PROD, or no ENVIRONMENT variable defined assume OS is Linux
     if (process.env.ENVIRONMENT === 'PROD' || !process.env.ENVIRONMENT) {
-        //get ip from Linux filesystem
         networkNodeIP = results['enX0'][0];
-    } else {
+    }
+    //else assume we are in Dev
+    else {
         networkNodeIP = process.env.ENVIRONMENT_TEMP_IP;
     }
 
