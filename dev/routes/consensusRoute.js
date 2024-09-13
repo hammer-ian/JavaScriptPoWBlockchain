@@ -3,6 +3,7 @@
 
 const express = require('express');
 const logger = require('../utils/logger');
+const rp = require('request-promise'); //manage internal HTTP requests
 
 module.exports = (blockchain) => {
     const router = express.Router();
