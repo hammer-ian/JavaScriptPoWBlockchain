@@ -3,7 +3,7 @@
 const logger = require('../utils/logger');
 
 function getBlock(blockHashToFind) {
-
+    logger.info(`Searching for block: ${blockHashToFind}`);
     let correctBlock = null;
     this.chain.forEach(block => {
         if (block.hash === blockHashToFind) correctBlock = block;
@@ -12,8 +12,10 @@ function getBlock(blockHashToFind) {
 }
 
 function getTransaction(transactionId) {
-    logger.info("Searching for transaction: ", transactionId);
-    let correctBlock, correctTransaction = null;
+    logger.info(`Searching for transaction: ${transactionId}`);
+    let correctBlock = null;
+    let correctTransaction = null;
+
     this.chain.forEach(block => {
         block.transactions.forEach(transaction => {
             if (transaction.txnID === transactionId) {
@@ -29,18 +31,18 @@ function getTransaction(transactionId) {
 }
 
 function getAddress(addressToFind) {
-    logger.info("Searching for transactions associated with: ", addressToFind);
+    logger.info(`Searching for transactions associated with address: ${addressToFind}`);
     const matchingTransactions = [];
     let addressBalance = 0;
     this.chain.forEach(block => {
         block.transactions.forEach(transaction => {
-            logger.info(transaction.sender, " ", transaction.recipient, " ", addressToFind)
-            if ((transaction.sender === addressToFind) || (transaction.recipient === addressToFind)) {
+            logger.info(transaction.debitAddress, " ", transaction.creditAddress, " ", addressToFind)
+            if ((transaction.creditAddress === addressToFind) || (transaction.debitAddress === addressToFind)) {
                 matchingTransactions.push(transaction);
 
                 //now calculate address balance
-                if (transaction.recipient === addressToFind) addressBalance += transaction.amount;
-                if (transaction.sender == addressToFind) addressBalance -= transaction.amount;
+                if (transaction.creditAddress === addressToFind) addressBalance += transaction.amount;
+                if (transaction.debitAddress == addressToFind) addressBalance -= transaction.amount;
             };
         });
     });

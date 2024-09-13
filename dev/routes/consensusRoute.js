@@ -29,7 +29,7 @@ module.exports = (blockchain) => {
             .then(blockchainsFromOtherNodesArr => {
                 //set currentChainLength to the length of the blockchain on the current node
                 const currentChainLength = blockchain.chain.length;
-                //initial variables for comparing blockchains from other nodes
+                //initialize variables for comparing this copy of the blockchain vs. other nodes
                 let maxChainLength = currentChainLength;
                 let newLongestChain = null;
                 let newPendingTransactions = null;
@@ -37,6 +37,7 @@ module.exports = (blockchain) => {
                 //for each blockchain on other nodes, compare the length
                 //if we find a longer blockchain, update the max chain length, and copy the blockchain and pending txns
                 blockchainsFromOtherNodesArr.forEach(blockchain => {
+                    //if we find another node has a longer chain
                     if (blockchain.chain.length > maxChainLength) {
                         maxChainLength = blockchain.chain.length;
                         newLongestChain = blockchain.chain;
@@ -45,6 +46,7 @@ module.exports = (blockchain) => {
                 });
                 //if there is no new longer chain, or the longer chain is not valid
                 if (!newLongestChain || (newLongestChain && !blockchain.chainIsValid(newLongestChain))) {
+                    logger.info('Consensus check finished. Local chain NOT replaced');
                     res.json({
                         note: "Local chain has NOT been replaced",
                         chain: blockchain.chain
@@ -53,7 +55,7 @@ module.exports = (blockchain) => {
                     //Valid longer chain found, update the blockchain on this node
                     blockchain.chain = newLongestChain;
                     blockchain.pendingTransactions = newPendingTransactions;
-
+                    logger.info('Consensus check finished. Local chain HAS been replaced');
                     res.json({
                         note: "Local chain HAS been replaced",
                         chain: blockchain.chain

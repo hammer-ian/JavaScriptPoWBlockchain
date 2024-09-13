@@ -144,14 +144,9 @@ app.post('/internal/receive-new-transaction', function (req, res) {
 
 app.get('/mine', function (req, res) {
 
-    logger.info('Starting to mine.. Need prevBlock hash, current block data, and nonce');
-    //Get prev block hash
-    const prevBlockHash = blockchain.getLastBlock()['hash'];
+    logger.info('Request received to mine..');
 
-    const nonce = blockchain.proofOfWork(prevBlockHash, blockchain.pendingTransactions);
-    const currentBlockHash = blockchain.hashBlockData(prevBlockHash, blockchain.pendingTransactions, nonce);
-    const newBlock = blockchain.createNewBlock(nonce, prevBlockHash, currentBlockHash, nodeAcc.address);
-
+    const newBlock = blockchain.mine(nodeAcc.address);
     const registerNewBlockPromises = [];
 
     blockchain.networkNodes.forEach(networkNodeUrl => {

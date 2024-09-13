@@ -9,9 +9,9 @@ class Account {
     //These variables represent the account state and must not be updated by methods outside of Account.js
     constructor(nickname) {
         this.nickname = nickname || ''; //placeholder
-        this.balance = 0; //initial amount for testing
+        this.balance = 200; //initial amount for testing
         this.address = uuidv4().split('-').join(''); //create account id  
-        this.nonce = 0 //sequential transaction counter to help prevent double spend
+        this.nonce = 1 //sequential transaction counter to help prevent double spend
     }
 
     //All changes to account state must be made via an Account method

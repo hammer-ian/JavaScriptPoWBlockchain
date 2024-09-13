@@ -7,7 +7,12 @@ require('dotenv').config();
 
 //Internal modules
 const BlockChainExplorer = require('./blockchainExplorer');
+const BlockChainIsValid = require('./blockchainIsValid');
 const Account = require('./account');
+
+//Map the methods defined in refactored blockchain files to the Blockchain object prototype
+Object.assign(Blockchain.prototype, BlockChainExplorer);
+Object.assign(Blockchain.prototype, BlockChainIsValid);
 
 function Blockchain(networkNodeURL) {
 
@@ -20,14 +25,15 @@ function Blockchain(networkNodeURL) {
     //contains other nodes on the network. Note does not contain this instance's url
     this.networkNodes = [];
 
-    this.blockSize = process.env.BLOCK_SIZE;
+    this.maxBlockSize = process.env.MAX_BLOCK_SIZE;
     //create Genesis block with arbitrary values
     this.chain.push({
         index: 1,
         timestamp: Date.now(),
         nonce: 100,
         prevBlockHash: 'NA',
-        hash: 'genesisHash'
+        hash: 'genesisHash',
+        transactions: [],
     });
 }
 
@@ -126,58 +132,37 @@ Blockchain.prototype.addNewTransactionToPendingPool = function (transactionObj) 
     //return the index of the block this transaction will get mined in i.e. the next block
 }
 
-Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
-
-    const newBlockReward = {
-        txnID: uuidv4().split('-').join(''),
-        debitAddress: 'system',
-        creditAddress: nodeAccAddress,
-        amount: 12.5,
-    };
-
-    return newBlockReward;
-
-}
-
 Blockchain.prototype.getLastBlock = function () {
 
     return this.chain[this.chain.length - 1];
 }
 
-//Create new block, create blockReward, add new block to chain, return new block
-Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, nodeAccAddress) {
+Blockchain.prototype.mine = function (nodeAccAddress) {
 
+    logger.info('Starting to mine.. Need prevBlock hash, current block data, and nonce');
+    const prevBlockHash = this.getLastBlock()['hash'];
+
+    const txnList = this.selectTransactions();
     const blockReward = this.createBlockReward(nodeAccAddress);
+    txnList.push(blockReward);
 
-    this.pendingTransactions.push(blockReward);
-
-    //create newBlock object
-    const newBlock = {
-        index: this.chain.length + 1,
-        timestamp: Date.now(),
-        transactions: this.pendingTransactions,
-        nonce: nonce,
-        hash: currentBlockHash,
-        prevBlockHash: prevBlockHash
-    };
-
-    //reset pending Transactions array ready for next new block
-    this.pendingTransactions = [];
-
-    //add new block to chain
-    this.chain.push(newBlock);
+    const nonce = this.proofOfWork(prevBlockHash, txnList);
+    const currentBlockHash = this.hashBlockData(prevBlockHash, txnList, nonce);
+    const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, txnList);
 
     return newBlock;
 }
 
-//Produce a SHA-256 hash given the prev block's hash, the current block data, and a nonce
-Blockchain.prototype.hashBlockData = function (prevBlockHash, currentBlockData, nonce) {
+Blockchain.prototype.selectTransactions = function () {
 
-    //convert all block data into a single string
-    const dataAsString = prevBlockHash + nonce.toString() + JSON.stringify(currentBlockData);
-    const hash = sha256(dataAsString);
-    return hash;
-}
+    const transactionsToMine = this.pendingTransactions
+        .sort((a, b) => b.gas - a.gas) // Sort by gas in descending order
+        .slice(0, this.maxBlockSize); // Copy the txns with the highest gas into the a new array. Block size determines how many txn we want
+
+    return transactionsToMine;
+};
+
+
 
 //Find the nonce, that when hashed with the previous block's hash, and the current blocks data,  
 //matches the blockchain's proof of work criteria e.g. a hash that starts with '0000'
@@ -196,52 +181,55 @@ Blockchain.prototype.proofOfWork = function (prevBlockHash, currentBlockData) {
     return nonce;
 }
 
-//Compare hashes in each block to ensure valid
-Blockchain.prototype.chainIsValid = function (blockchain) {
+//Produce a SHA-256 hash given the prev block's hash, the current block data, and a nonce
+Blockchain.prototype.hashBlockData = function (prevBlockHash, currentBlockData, nonce) {
 
-    let chainValid = true;
-    //check each block in chain, start at position 1 (skipping initial genesis block)
-    for (var i = 1; i < blockchain.length; i++) {
-        const currentBlock = blockchain[i];
-        const prevBlock = blockchain[i - 1];
-
-        //check chain "links" are correct - compare current block prevHash to previous block's hash
-        if (currentBlock['prevBlockHash'] !== prevBlock['hash']) {
-            logger.info(`FAIL: Issue with chain linking.current block prevHash is ${currentBlock['prevBlockHash']}, previous block hash is ${prevBlock['hash']} `);
-            chainValid = false;
-        }
-
-        //check current block data has not changed by computing the hash again
-        const blockHash = this.hashBlockData(
-            prevBlock['hash'],
-            currentBlock['transactions'],
-            currentBlock['nonce']
-        );
-        //make sure hash starts with '0000'
-        if (blockHash.substring(0, 4) !== '0000') {
-            logger.info("FAIL: Issue with current block data, recomputed hash is wrong");
-            logger.info(currentBlock['index'], prevBlock['hash'], currentBlock['transactions'], currentBlock['nonce']);
-            chainValid = false;
-        }
-    }
-    //now check genesis block
-    const genesisBlock = blockchain[0];
-    const correctGenesisNonce = genesisBlock['nonce'] === 100;
-    const correctGenesisPrevBlockHash = genesisBlock['prevBlockHash'] === 'NA';
-    const correctGenesisHash = genesisBlock['hash'] === 'genesisHash';
-    const correctGenesisTransactions = genesisBlock['transactions'].length === 0;
-
-    if (!correctGenesisNonce || !correctGenesisPrevBlockHash || !correctGenesisHash || !correctGenesisTransactions) {
-        logger.info("FAIL: Issue with genesis block");
-        chainValid = false;
-    }
-
-    return chainValid;
+    //convert all block data into a single string
+    const dataAsString = prevBlockHash + nonce.toString() + JSON.stringify(currentBlockData);
+    const hash = sha256(dataAsString);
+    return hash;
 }
 
-//Methods specific to Blockchain Explorer
-Blockchain.prototype.getBlock = BlockChainExplorer.getBlock;
-Blockchain.prototype.getTransaction = BlockChainExplorer.getTransaction;
-Blockchain.prototype.getAddress = BlockChainExplorer.getAddress;
+//Create new block, create blockReward, add new block to chain, return new block
+Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, txnList) {
+
+    //create newBlock object
+    const newBlock = {
+        index: this.chain.length + 1,
+        timestamp: Date.now(),
+        transactions: txnList,
+        nonce: nonce,
+        hash: currentBlockHash,
+        prevBlockHash: prevBlockHash
+    };
+
+    //Remove transactions selected for this block from pending pool
+    txnList.forEach(txn => {
+        const index = this.pendingTransactions.findIndex(t => t.txnID === txn.txnID);
+        if (index !== -1) {
+            this.pendingTransactions.splice(index, 1); // Remove the transaction from the original array
+        }
+    });
+
+    //add new block to chain
+    this.chain.push(newBlock);
+
+    return newBlock;
+}
+
+Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
+
+    const newBlockReward = {
+        txnID: uuidv4().split('-').join(''),
+        debitAddress: 'system',
+        creditAddress: nodeAccAddress,
+        amount: 12.5,
+    };
+
+    return newBlockReward;
+
+}
+
+
 
 module.exports = Blockchain;
