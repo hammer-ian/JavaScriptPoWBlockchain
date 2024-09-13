@@ -8,10 +8,10 @@ class Account {
 
     //These variables represent the account state and must not be updated by methods outside of Account.js
     constructor(nickname) {
-        this.nickname = nickname;
+        this.nickname = nickname || ''; //placeholder
         this.balance = 0; //initial amount for testing
         this.address = uuidv4().split('-').join(''); //create account id  
-        this.nonce = 1 //sequential transaction counter to help prevent double spend
+        this.nonce = 0 //sequential transaction counter to help prevent double spend
     }
 
     //All changes to account state must be made via an Account method
@@ -20,6 +20,10 @@ class Account {
         const prevBalance = this.balance;
         this.balance += amount;
         logger.info(`Act: ${this.accountid} balance has changed. Prev a/c balance: ${prevBalance} New a/c balance: ${this.balance}`);
+    }
+
+    setNickname(nickname) {
+        this.nickname = nickname;
     }
 
     debit(amount) {

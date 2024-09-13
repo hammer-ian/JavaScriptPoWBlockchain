@@ -23,7 +23,7 @@ function Blockchain(networkNodeURL) {
     this.blockSize = process.env.BLOCK_SIZE;
     //create Genesis block with arbitrary values
     this.chain.push({
-        index: 0,
+        index: 1,
         timestamp: Date.now(),
         nonce: 100,
         prevBlockHash: 'NA',
@@ -40,7 +40,9 @@ Blockchain.prototype.createNewAccount = function (nickname) {
 
 Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddress, amount, gas, nonce) {
 
-    const resultObj = this.validateTransaction(debitAddress, creditAddress, amount, gas, nonce);
+    //only validate the debit address, debit funds, debit nonce
+    //credit address will be created/credited when transaction is included in new block
+    const resultObj = this.validateTransaction(debitAddress, amount, gas, nonce);
 
     if (resultObj.ValidTxn) {
         //if no checks fail create txn object, adding in txn id
@@ -63,29 +65,25 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, creditAddress, amount, gas, nonce) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, nonce) {
 
     const resultObj = {
-        ValidTxn: false,  // Assume invalid unless proven valid
+        ValidTxn: false,  // Assume invalid until proven otherwise
         Error: null,
         Details: {}
     };
 
     //check debitAcc and creditAcc addresses exist
     const debitAddressAcc = this.accounts.find(account => account.address === debitAddress);
-    const creditAddressAcc = this.accounts.find(account => account.address === creditAddress);
 
-    if (debitAddressAcc && creditAddressAcc) {
-        logger.info(`Addresses found: Debit: ${debitAddressAcc.address}, Credit: ${creditAddressAcc.address}`);
+    if (debitAddressAcc) {
+        logger.info(`Debit address found: ${debitAddressAcc.address}`);
     } else {
-        logger.info(`Address(es) not found. 
-           Debit address Exists: ${!!debitAddressAcc}, Credit address Exists: ${!!creditAddressAcc}
-           Transaction aborted`);
+        logger.info(`Debit Address(es) not found. Transaction aborted`);
 
         resultObj.Error = `address check failed`;
         resultObj.Details = {
-            DebitAddress: !!debitAddressAcc,
-            CreditAddress: !!creditAddressAcc
+            DebitAddress: !!debitAddressAcc
         }
         return resultObj;
     }
@@ -121,6 +119,13 @@ Blockchain.prototype.validateTransaction = function (debitAddress, creditAddress
     return resultObj;
 }
 
+Blockchain.prototype.addNewTransactionToPendingPool = function (transactionObj) {
+
+    //add new transaction to list of pending txns, as it's not yet been validated
+    this.pendingTransactions.push(transactionObj);
+    //return the index of the block this transaction will get mined in i.e. the next block
+}
+
 Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
 
     const newBlockReward = {
@@ -133,19 +138,6 @@ Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
     return newBlockReward;
 
 }
-
-Blockchain.prototype.addNewTransactionToPendingPool = function (transactionObj) {
-
-    //add new transaction to list of pending txns, as it's not yet been validated
-    this.pendingTransactions.push(transactionObj);
-    //return the index of the block this transaction will get mined in i.e. the next block
-}
-
-Blockchain.prototype.transferFunds = function () {
-
-}
-
-
 
 Blockchain.prototype.getLastBlock = function () {
 
