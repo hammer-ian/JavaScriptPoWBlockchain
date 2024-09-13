@@ -23,6 +23,8 @@ function Blockchain(networkNodeURL) {
     this.blockSize = process.env.BLOCK_SIZE;
     //create Genesis block with arbitrary values
     this.chain.push({
+        index: 0,
+        timestamp: Date.now(),
         nonce: 100,
         prevBlockHash: 'NA',
         hash: 'genesisHash'

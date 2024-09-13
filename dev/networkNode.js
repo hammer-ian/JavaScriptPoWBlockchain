@@ -183,20 +183,24 @@ app.post('/internal/receive-new-block', function (req, res) {
     const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
 
     if (correctHash && correctIndex) {
+        const result = {
+            note: "new Block received and successfully added to chain",
+            newBlock: newBlock
+        };
+        logger.info(`New block accepted ${JSON.stringify(result)}`);
         blockchain.chain.push(newBlock);
         //reset pending transactions as they are in the new block
         blockchain.pendingTransactions = [];
-        res.json({
-            note: "new Block received and successfully added to chain",
-            newBlock: newBlock
-        })
+        res.json(result);
     } else {
-        res.json({
+        const result = {
             note: "new Block rejected",
             correctHash: correctHash,
             correctIndex: correctIndex,
             newBlock: newBlock
-        })
+        };
+        logger.info(`New block rejected ${JSON.stringify(result)}`);
+        res.json(result);
     }
 });
 
