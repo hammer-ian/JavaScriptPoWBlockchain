@@ -5,8 +5,7 @@ const newTransactionSchema = Joi.object({
     debitAddress: Joi.string().required(),
     creditAddress: Joi.string().required(),
     gas: Joi.number().positive().required(),
-    amount: Joi.number().positive().required(),
-    nonce: Joi.number().positive().required()
+    amount: Joi.number().positive().required()
 });
 // Middleware for validating transactions
 const validateTransactionJSON = (req, res, next) => {

@@ -7,10 +7,10 @@ const logger = require('../utils/logger');
 class Account {
 
     //These variables represent the account state and must not be updated by methods outside of Account.js
-    constructor(nickname) {
-        this.nickname = nickname || ''; //placeholder
+    constructor(nickname, address) {
+        this.nickname = nickname || ''; //default 
         this.balance = 200; //initial amount for testing
-        this.address = uuidv4().split('-').join(''); //create account id  
+        this.address = address || uuidv4().split('-').join('');
         this.nonce = 1 //sequential transaction counter to help prevent double spend
     }
 
@@ -19,7 +19,7 @@ class Account {
     setBalance(amount) {
         const prevBalance = this.balance;
         this.balance += amount;
-        logger.info(`Act: ${this.accountid} balance has changed. Prev a/c balance: ${prevBalance} New a/c balance: ${this.balance}`);
+        logger.info(`Act: ${this.address} balance has changed. Prev a/c balance: ${prevBalance} New a/c balance: ${this.balance}`);
     }
 
     setNickname(nickname) {
@@ -29,27 +29,28 @@ class Account {
     debit(amount) {
         if (this.debitCheck(amount)) {
             this.setBalance(-amount);
-            logger.info(`Act: ${this.accountid}: Debit success`);
+            logger.info(`Act: ${this.address}: Debit success`);
             return true;
         } else {
-            logger.info(`Act: ${this.accountid}: Debit failed`);
+            logger.info(`Act: ${this.address}: Debit failed`);
             return false;
         }
     }
 
     debitCheck(amount) {
         if (this.balance - amount < 0) {
-            logger.info(`Act: ${this.accountid}: Debit Check Failed: Insuff.Funds, cannot debit ${amount} from ${this.balance}`);
+            logger.info(`Act: ${this.address}: Debit Check Failed: Insuff.Funds, cannot debit ${amount} from ${this.balance}`);
             return false
         } else {
-            logger.info(`Act: ${this.accountid}: Debit Check Passed`);
+            logger.info(`Act: ${this.address}: Debit Check Passed`);
             return true;
         }
     }
 
     credit(amount) {
         this.setBalance(amount);
-        logger.info(`Act: ${this.accountid}: Credit success`);
+        logger.info(`Act: ${this.address}: Credit success`);
+        return true;
     }
 
     incrementTransactionCount() {

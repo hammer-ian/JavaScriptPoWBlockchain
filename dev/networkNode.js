@@ -83,12 +83,14 @@ app.get('/healthcheck', async (req, res) => {
 app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) {
     logger.info('Received transaction to broadcast, creating new transaction object');
 
+    const nonce = blockchain.getAccountNonce(req.body.debitAddress);
+
     const resultObj = blockchain.createNewTransaction(
         req.body.debitAddress,
         req.body.creditAddress,
         req.body.amount,
         req.body.gas,
-        req.body.nonce
+        nonce
     );
 
     //if returning object has a transaction ID property, transaction created successfully
@@ -146,28 +148,34 @@ app.get('/mine', function (req, res) {
 
     logger.info('Request received to mine..');
 
-    const newBlock = blockchain.mine(nodeAcc.address);
-    const registerNewBlockPromises = [];
+    const result = blockchain.mine(nodeAcc);
+    if (result.ValidBlock) {
+        const registerNewBlockPromises = [];
 
-    blockchain.networkNodes.forEach(networkNodeUrl => {
-        const requestOptions = {
-            uri: networkNodeUrl + '/internal/receive-new-block',
-            method: 'POST',
-            body: { newBlock: newBlock },
-            json: true
-        };
-        //Add each register request to array
-        //calling rp (request-promise) wraps the request in a Promise before adding it to the array
-        registerNewBlockPromises.push(rp(requestOptions));
-    });
-
-    Promise.all(registerNewBlockPromises)
-        .then(data => {
-            res.json({
-                note: "new block mined and broadcast successfully",
-                newBlock: newBlock
-            });
+        blockchain.networkNodes.forEach(networkNodeUrl => {
+            const requestOptions = {
+                uri: networkNodeUrl + '/internal/receive-new-block',
+                method: 'POST',
+                body: { newBlock: result.Details },
+                json: true
+            };
+            //Add each register request to array
+            //calling rp (request-promise) wraps the request in a Promise before adding it to the array
+            registerNewBlockPromises.push(rp(requestOptions));
         });
+
+        Promise.all(registerNewBlockPromises)
+            .then(data => {
+                res.json({
+                    note: "new block mined and broadcast successfully",
+                    newBlock: result.Details
+                });
+            });
+    } else {
+        res.json({
+            note: result.Error
+        })
+    }
 });
 
 app.post('/internal/receive-new-block', function (req, res) {
@@ -327,6 +335,7 @@ app.post('/internal/deregister-unhealthy-node', function (req, res) {
 app.listen(networkNodeDetails.networkNodePort, '0.0.0.0', function () {
 
     registerThisNode(networkNodeDetails);
+
     logger.info(`Listening on port ${networkNodeDetails.networkNodePort}..`);
 
 });
