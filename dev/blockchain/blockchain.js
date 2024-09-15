@@ -51,8 +51,9 @@ Blockchain.prototype.createNewAccount = function (nickname, address) {
     return null;
 }
 
-Blockchain.prototype.getAccountNonce = function (debitAddress) {
+Blockchain.prototype.getLatestNonce = function (debitAddress) {
 
+    logger.info('Retrieving account nonce');
     //Get current debit account nonce
     const debitAddressAcc = this.accounts.find(account => account.address === debitAddress);
     // Make sure debit account exists
@@ -61,26 +62,32 @@ Blockchain.prototype.getAccountNonce = function (debitAddress) {
     }
 
     const debitAccNonce = debitAddressAcc.nonce;
+    logger.info(`Debit account nonce is: ${debitAccNonce}`)
+    let hasPendingTransactions = false;
 
     //initialize to the debit account nonce. if there are no pending transactions this will be returned
     let pendingTxnNonce = debitAccNonce;
+
     //Check if there are pending transactions from this account which we need to consider
     this.pendingTransactions.forEach(txn => {
 
         if (txn.debitAddress === debitAddress) {
+            //if there are pending transactions we need to increment the largest nonce we find
+            logger.info('Pending transactions detected from debit account');
+            hasPendingTransactions = true;
             if (txn.nonce > pendingTxnNonce) pendingTxnNonce = txn.nonce;
         }
     });
-
-    //increment nonce for next transaction
-    return pendingTxnNonce;
+    logger.info(`PendingTxn:${hasPendingTransactions}, acc nonce ${debitAccNonce}, pending txn nonce: ${hasPendingTransactions ? pendingTxnNonce + 1 : pendingTxnNonce}`);
+    //return nonce for next transaction
+    return hasPendingTransactions ? pendingTxnNonce + 1 : pendingTxnNonce;
 }
 
 Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddress, amount, gas, nonce) {
 
     //only validate the debit address, debit funds, debit nonce
     //credit address will be created/credited when transaction is included in new block
-    const resultObj = this.validateTransaction(debitAddress, amount, gas, nonce);
+    const resultObj = this.validateTransaction(debitAddress, amount, gas);
 
     if (resultObj.ValidTxn) {
         //if no checks fail create txn object, adding in txn id
@@ -103,8 +110,9 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, nonce) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas) {
 
+    logger.info('Starting transaction validation');
     const resultObj = {
         ValidTxn: false,  // Assume invalid until proven otherwise
         Error: null,
@@ -113,6 +121,7 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
 
     //first check if txn is a system generated block reward
     if (debitAddress === 'system' && amount === this.blockRewardAmount) {
+        logger.info('Transaction is block reward. Block reward is correct');
         resultObj.ValidTxn = true;
         return resultObj;
     }
@@ -121,26 +130,13 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
     const debitAddressAcc = this.accounts.find(account => account.address === debitAddress);
 
     if (debitAddressAcc) {
-        logger.info(`Debit address found: ${debitAddressAcc.address}`);
+        logger.info(`Debit address exists: ${debitAddressAcc.address}`);
     } else {
-        logger.info(`Debit Address(es) not found. Transaction aborted`);
+        logger.info(`Debit Address(es) does not exist. Transaction aborted`);
 
         resultObj.Error = `address check failed`;
         resultObj.Details = {
             DebitAddress: !!debitAddressAcc
-        }
-        return resultObj;
-    }
-
-    //check the copy of the account nonce submitted with the transaction is valid
-    //this helps to prevent double spend
-    if (nonce !== debitAddressAcc.nonce) {
-
-        logger.info(`Account nonce check failed. TransactionNonce: ${nonce} <> AccountNonce: ${debitAddressAcc.nonce}`);
-        resultObj.Error = `account transaction count (nonce) check failed. Transaction nonce must equal Account nonce`;
-        resultObj.Details = {
-            TransactionNonce: `${nonce}`,
-            AccountNonce: `${debitAddressAcc.nonce}`
         }
         return resultObj;
     }
@@ -180,47 +176,145 @@ Blockchain.prototype.mine = function (nodeAcc) {
     const result = {
         ValidBlock: false,  // Assume invalid until proven otherwise
         Error: null,
-        Details: {}
+        Details: null
     };
 
     logger.info('Starting to mine.. Need prevBlock hash, current block data, and nonce');
     const prevBlockHash = this.getLastBlock()['hash'];
 
+    //Select transactions for block
     const txnList = this.selectTransactionsForBlock();
+    if (txnList.length === 0) {
+        logger.error('No eligible transactions identified for new block');
+        result.Error = "No eligible transactions identified for new block";
+        return result;
+    }
 
+    //Create block reward for miner
     const blockReward = this.createBlockReward(nodeAcc.address);
-    logger.info('Adding block reward to transaction list');
     txnList.push(blockReward);
 
-    //re-validate selected transactions, and execute the change of state contained within in the transactions
-    //transactions failing their re-validation will be removed from the block
-    const validatedTxnList = this.processSelectedTransactions(txnList, nodeAcc);
+    //Re-validate selected transactions
+    //Execute the change of state contained within in the transactions
+    //Transactions failing their re-validation or processing will be removed from the block
+    const processedListObj = this.processSelectedTransactions(txnList, nodeAcc);
+    const processedList = processedListObj.processedList;
 
-    //Sufficient valid transactions exist for new block, create new block
-    if (validatedTxnList.length >= 2) {
-        const nonce = this.proofOfWork(prevBlockHash, validatedTxnList);
-        const currentBlockHash = this.hashBlockData(prevBlockHash, validatedTxnList, nonce);
-        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, validatedTxnList);
+    //If sufficient valid transactions remain create new block (2 = block reward + 1)
+    if (processedList.length >= 2) {
+        const nonce = this.proofOfWork(prevBlockHash, processedList);
+        const currentBlockHash = this.hashBlockData(prevBlockHash, processedList, nonce);
+        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, processedList, nodeAcc.address);
 
         result.ValidBlock = true;
         result.Details = newBlock;
     } else {
         logger.info('Block creation failed. Txn count below threshold. Insufficient valid txns identified')
         result.Error = "Issue with processing transactions selected for block, no valid transactions. New block aborted";
-        result.Details = "";
+        result.Details = processedListObj.errorList;
     }
 
     return result;
 }
-
+/* 
+ Objective is to select the txn with the highest gas fee, 
+ Whilst still processing txn's in the correct sequence if there are multiple pending txn for an account
+ Prioritize accounts with only a single txn pending so we don't need to worry about the sequence
+*/
 Blockchain.prototype.selectTransactionsForBlock = function () {
 
     logger.info(`Selecting max ${this.maxBlockSize} transactions from pending pool prioritized by gas fee`);
-    const transactionsToMine = this.pendingTransactions
+
+    let blockTransactions = [];
+
+    // Step 1: Group pending transactions by account
+    let transactionsByAccount = groupByAccount(this.pendingTransactions);
+    logger.info(`Pending transactions grouped by account ${JSON.stringify(transactionsByAccount)}`);
+
+    // Step 2: Identify accounts with 1 transaction
+    let singleTxAccounts = filterSingleTransactionAccounts(transactionsByAccount);
+    logger.info(`Pending transactions from accounts with only 1 txn pending: ${JSON.stringify(singleTxAccounts)}`);
+
+    //Step 3: single account txns with highest gas
+    blockTransactions = singleTxAccounts
         .sort((a, b) => b.gas - a.gas) // Sort by gas in descending order
         .slice(0, this.maxBlockSize); // Copy the txns with the highest gas into the a new array. Block size determines how many txn we want
 
-    return transactionsToMine;
+    //Step 4: if block has space for more txns process multi-txn accounts
+    if (blockTransactions.length < this.maxBlockSize) {
+
+        const spaceInBlock = (this.maxBlockSize) - blockTransactions.length;
+        logger.info(`No more single txn accounts, ${spaceInBlock} spots left for multi txn accounts`);
+
+        let multiTxAccounts = filterMultiTransactionAccounts(transactionsByAccount);
+        let transactionsToAdd = [];
+
+        for (let address in multiTxAccounts) {
+            //sort the txns by nonce in the each multi txn account
+            let accountTxns = multiTxAccounts[address].sort((a, b) => a.nonce - b.nonce);
+
+            for (let txn of accountTxns) {
+                //break TXN loop. if there are no more spots we do not need to process more TXNs
+                if (transactionsToAdd.length >= spaceInBlock) {
+                    break;
+                }
+                transactionsToAdd.push(txn);
+            }
+            //break ACCOUNT loop. if there are no more spots we do not need to process more ACCOUNTS
+            if (transactionsToAdd.length >= spaceInBlock) {
+                break;
+            }
+        }
+        logger.info(`Adding to block: ${JSON.stringify(transactionsToAdd)}`);
+        blockTransactions.push(...transactionsToAdd);
+    }
+    logger.info(`Transactions selected for block: ${JSON.stringify(blockTransactions)}`);
+    return blockTransactions;
+
+    function groupByAccount(pendingTransactions) {
+        // Create an object to hold the grouped transactions
+        let transactionsByAccount = {};
+
+        // Iterate through all pending transactions
+        for (let tx of pendingTransactions) {
+            // Get the account debit address from the transaction
+            let debitAddress = tx.debitAddress;
+
+            // If this is the first time we've seen this account, create an empty array for it
+            if (!transactionsByAccount[debitAddress]) {
+                transactionsByAccount[debitAddress] = [];
+            }
+            // Push the transaction into the array for this account
+            transactionsByAccount[debitAddress].push(tx);
+        }
+        return transactionsByAccount;
+    }
+    function filterSingleTransactionAccounts(transactionsByAccount) {
+        let singleTxAccounts = [];
+
+        // Iterate over each debit address in the transactionsByAccount object
+        for (let debitAddress in transactionsByAccount) {
+            // Check if this account has exactly one pending transaction
+            if (transactionsByAccount[debitAddress].length === 1) {
+                // Push the single transaction into the result array
+                singleTxAccounts.push(transactionsByAccount[debitAddress][0]);
+            }
+        }
+        return singleTxAccounts;
+    }
+    function filterMultiTransactionAccounts(transactionsByAccount) {
+        let multiTxAccounts = {};
+
+        // Iterate over each account in the transactionsByAccount object
+        for (let account in transactionsByAccount) {
+            // Check if this account has more than one pending transaction
+            if (transactionsByAccount[account].length > 1) {
+                // Add the account and its transactions to the result object
+                multiTxAccounts[account] = transactionsByAccount[account];
+            }
+        }
+        return multiTxAccounts;
+    }
 };
 
 //Find the nonce, that when hashed with the previous block's hash, and the current blocks data,  
@@ -250,7 +344,7 @@ Blockchain.prototype.hashBlockData = function (prevBlockHash, currentBlockData, 
 }
 
 //Create new block, create blockReward, add new block to chain, return new block
-Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, txnList) {
+Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, txnList, nodeAccAddress) {
 
     //create newBlock object
     const newBlock = {
@@ -259,7 +353,8 @@ Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlo
         transactions: txnList,
         nonce: nonce,
         hash: currentBlockHash,
-        prevBlockHash: prevBlockHash
+        prevBlockHash: prevBlockHash,
+        miner: nodeAccAddress
     };
 
     //Remove transactions selected for this block from pending pool
@@ -296,26 +391,38 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, nodeAcc) {
 
     logger.info('Starting re-validation of transactions selected from pending pool before creating block');
 
+    const processingResult = {
+        processedList: null,
+        errorList: null
+    };
+
     // Re-validate transactions selected from pending pool
-    validTxnList = txnList.filter(txn => {
+    let processedList = txnList.filter(txn => {
         //re-validate txn. note the debit check evaluates the txn in isolation
         //debit check does not take into account other pending txns in this block that may get processed first
-        const result = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, txn.nonce);
+        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas);
         //if still valid execute change of state contained in transaction
-        if (result.ValidTxn) {
+        if (validationResult.ValidTxn) {
 
             const debitAddressAcc = this.accounts.find(account => account.address === txn.debitAddress);
             let creditAddressAcc = this.accounts.find(account => account.address === txn.creditAddress);
 
             if (txn.debitAddress !== 'system') {
-                if (debitAddressAcc.debit(txn.amount + txn.gas)) {
-                    // if debit account successfully debited, credit miner with txn gas fee
-                    nodeAcc.credit(txn.gas);
-                } else {
+                //check transaction is being processed in the correct sequence as per debit account nonce
+                if (txn.nonce !== debitAddressAcc.nonce) {
+                    logger.error(`Issue with sequencing. Txn nonce ${txn.nonce} !== ${debitAddressAcc.nonce}`);
+                    return false;
+                }
+
+                if (!debitAddressAcc.debit(txn.amount + txn.gas)) {
                     //debit failed remove transaction from list of valid transactions
                     logger.error(`Debit check failed for: ${debitAddressAcc.address}. Balance exhausted by other transactions in block.`);
                     return false;
                 }
+
+                // debit successful, increment nonce and credit miner with txn gas fee
+                debitAddressAcc.incrementTransactionCount();
+                nodeAcc.credit(txn.gas);
             }
             //now credit beneficiary, first checking to make sure account exists
             if (creditAddressAcc) {
@@ -325,17 +432,24 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, nodeAcc) {
                 creditAddressAcc = this.createNewAccount("", txn.creditAddress);
                 creditAddressAcc.credit(txn.amount);
             }
-
-            // Increment debit account nonce
-
-            return true;  // Transaction valid
+            return true;  // Transaction valid AND processed successfully
         } else {
-            return false; // Transaction not valid
+            return false; // Transaction validation failed
         }
     });
+    //if the # of txns selected for block !==  # of txns successfully processed
+    if (txnList.length !== processedList.length) {
+        //filter() iterates through array evaluating elements, where condition is true element is added to a new array
+        //some() method returns true if txnID is found, but we want to keep missing txns (false not found) so we flip the boolean with !processedList
+        //that means some() passes true to filter() when txn not found
+        const errorList = txnList.filter(selectedTxn => !processedList.some(txn => txn.txnID === selectedTxn.txnID));
+        logger.error(`Following txns were not processed successfully: ${JSON.stringify(errorList)}`);
 
-    logger.info(`Valid transactions are: ${validTxnList}`);
-    return validTxnList;
+        processingResult.errorList = errorList;
+    }
+
+    processingResult.processedList = processedList;
+    return processingResult;
 }
 
 module.exports = Blockchain;

@@ -11,7 +11,7 @@ class Account {
         this.nickname = nickname || ''; //default 
         this.balance = 200; //initial amount for testing
         this.address = address || uuidv4().split('-').join('');
-        this.nonce = 1 //sequential transaction counter to help prevent double spend
+        this.nonce = 0 //sequential transaction counter to help prevent double spend
     }
 
     //All changes to account state must be made via an Account method
@@ -55,6 +55,7 @@ class Account {
 
     incrementTransactionCount() {
         this.nonce++;
+        logger.info(`Act: ${this.address}: Account nonce incremented to ${this.nonce}`);
     }
 
 }

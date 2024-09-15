@@ -83,7 +83,7 @@ app.get('/healthcheck', async (req, res) => {
 app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) {
     logger.info('Received transaction to broadcast, creating new transaction object');
 
-    const nonce = blockchain.getAccountNonce(req.body.debitAddress);
+    const nonce = blockchain.getLatestNonce(req.body.debitAddress);
 
     const resultObj = blockchain.createNewTransaction(
         req.body.debitAddress,
@@ -173,7 +173,8 @@ app.get('/mine', function (req, res) {
             });
     } else {
         res.json({
-            note: result.Error
+            note: result.Error,
+            details: result.Details
         })
     }
 });
