@@ -77,10 +77,13 @@ Detailed Activity Log Of Completed Work:
 **V2**
 
 **Project & AWS Infrastructure**
-TBC
+* JSON schema validation for POST requests
 
 **New Blockchain Features**
-* Implemented JSON schema validation for POST requests
-* Implemented Account model to enabled “state” to be maintained on blockchain
-* Account debit checks: Account address and debit validations
-* Automate the creation of a node account at start up (for mining rewards)
+* Account model to enable “state” to be maintained on blockchain
+  * Account validation: debit checks, accounts nonces
+  * Like Ethereum the blockchain does not require the credit account to exist until a txn is processed crediting that account
+* Transaction lifecyle
+  * txn created -> txn validated -> txn added to pending pool -> txn selected for block -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool
+* Miner algorithm to select transactions for new blocks
+  * Algorithm prioritizes transactions based on their gas, whilst still ensuring txns for the same account are processed in the correct order (using account nonce)
