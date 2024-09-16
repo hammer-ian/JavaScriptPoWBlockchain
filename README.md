@@ -81,6 +81,7 @@ Detailed Activity Log Of Completed Work:
 
 **Project & AWS Infrastructure**
 * JSON schema validation for POST requests
+* Migrated application to Docker
 * Automated testing framework
 
 **New Blockchain Features**
