@@ -33,6 +33,7 @@ High Level Roadmap
   * a transaction lifecyle
   * miners, gas fees, configurable block sizes and block rewards
   * block "state root" header (merkle tree roots) to ensure each node can maintain a local copy of the *global* state
+  * automated testing framework
 
 **V3 - Add a VM and Smart Contracts**
 * Build a lightweight virtual machine that has a runtime environment isolated from the blockchain node that it runs on
@@ -80,6 +81,7 @@ Detailed Activity Log Of Completed Work:
 
 **Project & AWS Infrastructure**
 * JSON schema validation for POST requests
+* Automated testing framework
 
 **New Blockchain Features**
 * Account model to enable “state” to be maintained on blockchain
