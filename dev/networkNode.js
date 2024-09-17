@@ -118,7 +118,7 @@ app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) 
             });
     } else {
         logger.info(`Transaction creation failed ${JSON.stringify(resultObj)}`);
-        res.json({
+        res.status(400).json({
             note: "transaction creation failed",
             result: resultObj
         });
@@ -140,7 +140,7 @@ app.post('/internal/receive-new-transaction', function (req, res) {
         blockchain.addNewTransactionToPendingPool(newTxnObj);
         res.json({ note: `transaction added to pending pool, respondingNode: ${blockchain.currentNodeUrl}` });
     } else {
-        res.json({ note: `transaction validation failed, txn not added to pending pool: ${resultObj}` });
+        res.status(400).json({ note: `transaction validation failed, txn not added to pending pool: ${resultObj}` });
     }
 });
 
@@ -148,7 +148,7 @@ app.get('/mine', function (req, res) {
 
     logger.info('Request received to mine..');
 
-    const result = blockchain.mine(nodeAcc);
+    const result = blockchain.mine(nodeAcc.address);
     if (result.ValidBlock) {
         const registerNewBlockPromises = [];
 
@@ -172,7 +172,7 @@ app.get('/mine', function (req, res) {
                 });
             });
     } else {
-        res.json({
+        res.status(400).json({
             note: result.Error,
             details: result.Details
         })
@@ -181,33 +181,15 @@ app.get('/mine', function (req, res) {
 
 app.post('/internal/receive-new-block', function (req, res) {
 
+    logger.info('Received new block from network..');
     const newBlock = req.body.newBlock;
-    const lastBlock = blockchain.getLastBlock();
-    //make sure new block hash has the correct previous block hash so we don't break the chain
-    const correctHash = lastBlock.hash === newBlock.prevBlockHash;
-    //make sure the new block has the correct index, equal to last block + 1
-    const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
 
-    if (correctHash && correctIndex) {
-        const result = {
-            note: "new Block received and successfully added to chain",
-            newBlock: newBlock
-        };
-        logger.info(`New block accepted ${JSON.stringify(result)}`);
-        blockchain.chain.push(newBlock);
-        //reset pending transactions as they are in the new block
-        blockchain.pendingTransactions = [];
+    const result = blockchain.receiveNewBlock(newBlock);
+    if (result.status === 'success') {
         res.json(result);
-    } else {
-        const result = {
-            note: "new Block rejected",
-            correctHash: correctHash,
-            correctIndex: correctIndex,
-            newBlock: newBlock
-        };
-        logger.info(`New block rejected ${JSON.stringify(result)}`);
-        res.json(result);
+        return;
     }
+    res.status(400).json(result);
 });
 
 /* Each new node (e.g. :3009) registers itself with ONE existing node (e.g. 3001), and asks that
@@ -260,7 +242,13 @@ app.post('/register-and-broadcast-node', function (req, res) {
 
             return rp(bulkRegisterOptions);
         })
-        .catch(err => logger.info(err))
+        .catch(err => {
+            logger.info(err);
+            res.status(400).json({
+                note: 'Node registration or broadcast failed',
+                error: `${JSON.stringify(err)}`
+            });
+        })
         .then(data => {
             res.json({ note: 'New node registered with network successfully' });
         });

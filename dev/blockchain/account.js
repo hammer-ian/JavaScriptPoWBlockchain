@@ -9,7 +9,7 @@ class Account {
     //These variables represent the account state and must not be updated by methods outside of Account.js
     constructor(nickname, address) {
         this.nickname = nickname || ''; //default 
-        this.balance = 200; //initial amount for testing
+        this.balance = 0; //initial amount for testing
         this.address = address || uuidv4().split('-').join('');
         this.nonce = 0 //sequential transaction counter to help prevent double spend
     }

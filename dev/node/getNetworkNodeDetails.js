@@ -11,30 +11,20 @@ const getNetworkNodeDetails = () => {
     logger.info(`Setting Network node URL`);
     let networkNodeIP;
     const nets = networkInterfaces();
-    const results = Object.create(null); // Or just '{}', an empty object
+    //const results = Object.create(null); // Or just '{}', an empty object
 
     for (const name of Object.keys(nets)) {
         for (const net of nets[name]) {
-            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
-            // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
-            const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
-            if (net.family === familyV4Value && !net.internal) {
-                if (!results[name]) {
-                    results[name] = [];
-                }
-                results[name].push(net.address);
+            // We're interested in non-internal, IPv4 addresses
+            if (net.family === 'IPv4' && !net.internal) {
+                networkNodeIP = net.address;
+                break;
             }
         }
-    }
-    //if in PROD, or no ENVIRONMENT variable defined assume OS is Linux
-    if (process.env.ENVIRONMENT === 'PROD' || !process.env.ENVIRONMENT) {
-        networkNodeIP = results['enX0'][0];
-    }
-    //else assume we are in Dev
-    else {
-        networkNodeIP = process.env.ENVIRONMENT_TEMP_IP;
+        if (networkNodeIP) break;  // Stop when we've found the local IP
     }
 
+    logger.info(`Host IP retrieved from network interface is: ${networkNodeIP}`);
     //read PORT from .env configuration file 
     const networkNodePort = process.env.PORT;
 

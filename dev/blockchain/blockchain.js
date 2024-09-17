@@ -26,18 +26,23 @@ function Blockchain(networkNodeURL) {
     //contains other nodes on the network. Note does not contain this instance's url
     this.networkNodes = [];
 
-    this.maxBlockSize = process.env.MAX_BLOCK_SIZE;
-    this.blockRewardAmount = Number(process.env.BLOCK_REWARD);
+    this.maxBlockSize = parseInt(process.env.MAX_BLOCK_SIZE);
+    this.blockRewardAmount = parseFloat(process.env.BLOCK_REWARD);
 
     //create Genesis block with arbitrary values
     this.chain.push({
         index: 1,
-        timestamp: Date.now(),
+        timestamp: 123456789101,
         nonce: 100,
         prevBlockHash: 'NA',
         hash: 'genesisHash',
         transactions: [],
     });
+
+    //pre-mine, need to seed network with initial funds in an account
+    //after the pre-mine the only source of new funds on the network will be block rewards
+    this.accounts.push(new Account('genesis-account', '8f1063264ae34c49b8452464704fd900'));
+    this.accounts[0].credit(1000);
 }
 
 Blockchain.prototype.createNewAccount = function (nickname, address) {
@@ -171,7 +176,7 @@ Blockchain.prototype.getLastBlock = function () {
     return this.chain[this.chain.length - 1];
 }
 
-Blockchain.prototype.mine = function (nodeAcc) {
+Blockchain.prototype.mine = function (minerAccAddr) {
 
     const result = {
         ValidBlock: false,  // Assume invalid until proven otherwise
@@ -191,20 +196,20 @@ Blockchain.prototype.mine = function (nodeAcc) {
     }
 
     //Create block reward for miner
-    const blockReward = this.createBlockReward(nodeAcc.address);
+    const blockReward = this.createBlockReward(minerAccAddr);
     txnList.push(blockReward);
 
     //Re-validate selected transactions
     //Execute the change of state contained within in the transactions
     //Transactions failing their re-validation or processing will be removed from the block
-    const processedListObj = this.processSelectedTransactions(txnList, nodeAcc);
+    const processedListObj = this.processSelectedTransactions(txnList, minerAccAddr);
     const processedList = processedListObj.processedList;
 
     //If sufficient valid transactions remain create new block (2 = block reward + 1)
     if (processedList.length >= 2) {
         const nonce = this.proofOfWork(prevBlockHash, processedList);
         const currentBlockHash = this.hashBlockData(prevBlockHash, processedList, nonce);
-        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, processedList, nodeAcc.address);
+        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, processedList, minerAccAddr);
 
         result.ValidBlock = true;
         result.Details = newBlock;
@@ -243,7 +248,7 @@ Blockchain.prototype.selectTransactionsForBlock = function () {
     //Step 4: if block has space for more txns process multi-txn accounts
     if (blockTransactions.length < this.maxBlockSize) {
 
-        const spaceInBlock = (this.maxBlockSize) - blockTransactions.length;
+        const spaceInBlock = this.maxBlockSize - blockTransactions.length;
         logger.info(`No more single txn accounts, ${spaceInBlock} spots left for multi txn accounts`);
 
         let multiTxAccounts = filterMultiTransactionAccounts(transactionsByAccount);
@@ -381,13 +386,61 @@ Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
         creditAddress: nodeAccAddress,
         amount: this.blockRewardAmount
     };
-
     return newBlockReward;
+}
 
+Blockchain.prototype.receiveNewBlock = function (newBlock) {
+
+    const lastBlock = this.getLastBlock();
+    //make sure new block hash has the correct previous block hash so we don't break the chain
+    const correctHash = lastBlock.hash === newBlock.prevBlockHash;
+    //make sure the new block has the correct index, equal to last block + 1
+    const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
+
+    let processingResult;
+    //if new block has correct hash, i.e. chained hashes are in tact
+    if (correctHash && correctIndex) {
+        //process transactions in new block
+        const txnList = newBlock.transactions;
+        processingResult = this.processSelectedTransactions(txnList, newBlock.miner);
+
+        if (processingResult.errorList === null || processingResult.errorList.length === 0) {
+
+            this.chain.push(newBlock);
+
+            //Remove transactions received in this block from pending pool
+            txnList.forEach(txn => {
+                const index = this.pendingTransactions.findIndex(t => t.txnID === txn.txnID);
+                if (index !== -1) {
+                    this.pendingTransactions.splice(index, 1); // Remove the transaction from pending pool
+                }
+            });
+
+            const success = {
+                status: 'success',
+                note: "new Block processed and successfully added to chain",
+                newBlock: newBlock
+            };
+            logger.info(`New block accepted ${JSON.stringify(success)}`);
+            return success;
+        }
+    }
+
+    const failure = {
+        status: "failed",
+        note: 'new block failed validation, not added to chain',
+        correctHash: correctHash,
+        correctIndex: correctIndex,
+        failedBlock: newBlock,
+        errorList: processingResult ? processingResult.errorList : null
+    };
+    logger.info(`New block rejected ${JSON.stringify(failure)}`);
+
+    return failure;
 }
 
 //Re-validate and process transactions in new block
-Blockchain.prototype.processSelectedTransactions = function (txnList, nodeAcc) {
+Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr) {
 
     logger.info('Starting re-validation of transactions selected from pending pool before creating block');
 
@@ -406,6 +459,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, nodeAcc) {
 
             const debitAddressAcc = this.accounts.find(account => account.address === txn.debitAddress);
             let creditAddressAcc = this.accounts.find(account => account.address === txn.creditAddress);
+            let minerAddrAcc = this.accounts.find(account => account.address === minerAddr);
 
             if (txn.debitAddress !== 'system') {
                 //check transaction is being processed in the correct sequence as per debit account nonce
@@ -422,7 +476,12 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, nodeAcc) {
 
                 // debit successful, increment nonce and credit miner with txn gas fee
                 debitAddressAcc.incrementTransactionCount();
-                nodeAcc.credit(txn.gas);
+                if (minerAddrAcc) {
+                    minerAddrAcc.credit(txn.gas);
+                } else {
+                    minerAddrAcc = this.createNewAccount("", minerAddr);
+                    minerAddrAcc.credit(txn.gas);
+                }
             }
             //now credit beneficiary, first checking to make sure account exists
             if (creditAddressAcc) {
