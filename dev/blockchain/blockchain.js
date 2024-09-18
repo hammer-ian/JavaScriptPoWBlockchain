@@ -442,7 +442,7 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
 //Re-validate and process transactions in new block
 Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr) {
 
-    logger.info('Starting re-validation of transactions selected from pending pool before creating block');
+    logger.info('Starting re-validation of selected transactions before creating block');
 
     const processingResult = {
         processedList: null,

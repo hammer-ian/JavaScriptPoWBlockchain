@@ -129,6 +129,23 @@ const getSeedNodesDESKTOP = async (networkNodeDetails) => {
     const seedNodes = process.env.LOCAL_DOCKER_SEED_NODES;
     const seedNodeArray = seedNodes.split(',');
     logger.info(`Development seed nodes are: ${seedNodeArray}`);
+
+
+    const serviceName = process.env.SERVICE_NAME;
+    logger.info(`Node service name is: ${serviceName}`);
+    //remove this node from the list of seed nodes, a node cannot register with itself
+    if (serviceName === 'node1') {
+        const index = seedNodeArray.indexOf('host.docker.internal:3001');
+        seedNodeArray.splice(index, 1);
+    } else if (serviceName === 'node2') {
+        const index = seedNodeArray.indexOf('host.docker.internal:3002');
+        seedNodeArray.splice(index, 1);
+    } else if (serviceName === 'node2') {
+        const index = seedNodeArray.indexOf('host.docker.internal:3003');
+        seedNodeArray.splice(index, 1);
+    }
+    logger.info(`Development seed nodes minus this node are: ${seedNodeArray}`);
+
     //Re-check number of healthy instances after we've removed this node's IP
     if (seedNodeArray.length === 0) {
         logger.error('No healthy seed nodes found to register new node. Registration will be aborted');

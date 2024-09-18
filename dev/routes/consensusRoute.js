@@ -44,23 +44,57 @@ module.exports = (blockchain) => {
                         newPendingTransactions = blockchain.pendingTransactions;
                     }
                 });
+
+                const isValidLongestChain = newLongestChain && blockchain.chainIsValid(newLongestChain);
+
                 //if there is no new longer chain, or the longer chain is not valid
-                if (!newLongestChain || (newLongestChain && !blockchain.chainIsValid(newLongestChain))) {
+                if (!newLongestChain || !isValidLongestChain) {
                     logger.info('Consensus check finished. Local chain NOT replaced');
-                    res.json({
+                    return res.status(200).json({
                         note: "Local chain has NOT been replaced",
                         chain: blockchain.chain
                     });
-                } else if (newLongestChain && blockchain.chainIsValid(newLongestChain)) {
-                    //Valid longer chain found, update the blockchain on this node
-                    blockchain.chain = newLongestChain;
-                    blockchain.pendingTransactions = newPendingTransactions;
-                    logger.info('Consensus check finished. Local chain HAS been replaced');
-                    res.json({
-                        note: "Local chain HAS been replaced",
-                        chain: blockchain.chain
-                    });
+
                 }
+
+                //back up the local copy of blockchain account state in case we need to rollback
+                const oldAccounts = blockchain.accounts;
+
+                //process the transactions in each block to get the account state as per longest chain
+                for (const block of newLongestChain) {
+
+                    const result = blockchain.processSelectedTransactions(block.transactions, block.miner);
+                    //if there are any errors rollback the processing and abort consensus
+                    if (result.errorList && result.errorList.length > 0) {
+                        //rollback any changes to account state
+                        blockchain.accounts = oldAccounts;
+                        logger.error(`Error processing longest chain blocks, consensus aborted ${JSON.stringify(result.errorList)}`);
+                        //stop consensus
+                        return res.status(500).json({
+                            note: "Consensus failed, error processing block",
+                            block: block,
+                            failedTxns: result.errorList
+                        });
+                    }
+                }
+                //Valid longer chain found and no errors, each block processed successfully, update the blockchain on this node
+                logger.info('Longer chain identified and blocks processed successfully');
+                blockchain.chain = newLongestChain;
+                blockchain.pendingTransactions = newPendingTransactions;
+
+                logger.info('Consensus check finished. Local chain HAS been replaced');
+                return res.status(200).json({
+                    note: "Local chain HAS been replaced",
+                    chain: blockchain.chain
+                });
+
+            })
+            .catch(error => {
+                logger.error('Consensus check failed:', error);
+                res.status(500).json({
+                    note: "Consensus check failed due to an error",
+                    error: error.message
+                });
             });
     });
 
