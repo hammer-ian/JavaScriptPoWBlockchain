@@ -88,6 +88,7 @@ Detailed Activity Log Of Completed Work:
 * Account model to enable “state” to be maintained on blockchain
   * Account validations include address/debit checks and accounts nonces to ensure txns processed in correct sequence
   * Like Ethereum the blockchain does not require the credit account to exist until a txn is processed which credits that address
+  * Consensus algorithm updated to re-process all transactions in all blocks when it finds a longer chain, ensuring local account state consistent with global account state on other nodes
 * Transaction lifecyle
   * txn created -> txn validated -> txn added to pending pool -> txn selected for block by miner -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool -> block broadcast to the network -> receiving block processes txn state
 * Miner algorithm to select transactions for new blocks
