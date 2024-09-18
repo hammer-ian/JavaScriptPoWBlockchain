@@ -53,6 +53,7 @@ const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 const nodeId = `node-${uuidv4().split('-').join('')}`; //generate unique node id
 const nodeAcc = blockchain.createNewAccount(nodeId);
+const ENVIRONMENT = process.env.ENVIRONMENT;
 
 /**********************************
   
@@ -198,10 +199,12 @@ app.post('/register-and-broadcast-node', function (req, res) {
 
     logger.info(`register-and-bcast-node: Request received to register ${req.body.newNodeURL}`);
     const newNodeURL = req.body.newNodeURL;
+    logger.info(`currentNodeURL: ${blockchain.currentNodeUrl}, newNodeURL: ${newNodeURL}`);
     const notCurrentNode = blockchain.currentNodeUrl !== newNodeURL;
 
     //If newNodeURL is not already registered, and not currentNode, add url to list of network nodes registered with this instance
     if (blockchain.networkNodes.indexOf(newNodeURL) == -1 && notCurrentNode) {
+        logger.info(`Adding new node URL to this node's list of network hosts`);
         blockchain.networkNodes.push(newNodeURL);
     }
     /* create broadcasting request array: each request to register the new node with other network nodes 

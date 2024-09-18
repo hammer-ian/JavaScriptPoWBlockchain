@@ -13,17 +13,21 @@ const getNetworkNodeDetails = () => {
     const nets = networkInterfaces();
     //const results = Object.create(null); // Or just '{}', an empty object
 
+    // Loop through network interfaces
     for (const name of Object.keys(nets)) {
         for (const net of nets[name]) {
             // We're interested in non-internal, IPv4 addresses
             if (net.family === 'IPv4' && !net.internal) {
+                // Prioritize selecting from the "Ethernet" adapter
+                //if (name === 'Ethernet') {
                 networkNodeIP = net.address;
                 break;
+                //}
             }
         }
         if (networkNodeIP) break;  // Stop when we've found the local IP
     }
-
+    logger.info(`Host network interfaces: ${JSON.stringify(nets)}`);
     logger.info(`Host IP retrieved from network interface is: ${networkNodeIP}`);
     //read PORT from .env configuration file 
     const networkNodePort = process.env.PORT;

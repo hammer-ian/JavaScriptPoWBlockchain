@@ -1,0 +1,35 @@
+version: '4'
+services:
+  node1:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "3001:3001"  # Maps localhost:3001 to container's port 3001
+    environment:
+      - PORT=3001
+    volumes:
+      - ~/.aws:/root/.aws  # Mounts AWS credentials
+
+  node2:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "3002:3001"  # Maps localhost:3002 to container's port 3001
+    environment:
+      - PORT=3001
+    volumes:
+      - ~/.aws:/root/.aws  # Mounts AWS credentials
+
+  node3:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "3003:3001"  # Maps localhost:3003 container's port 3001
+    environment:
+      - PORT=3001
+    volumes:
+      - ~/.aws:/root/.aws  # Mounts AWS credentials
+
