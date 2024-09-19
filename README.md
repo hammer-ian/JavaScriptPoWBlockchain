@@ -32,7 +32,7 @@ High Level Roadmap
   * account's which maintain a 'state', and account nonce's to prevent double spend
   * a transaction lifecyle
   * miners, gas fees, configurable block sizes and block rewards
-  * block "state root" header (merkle tree roots) to ensure each node can maintain a local copy of the *global* state
+  * state root and merkle trie roots in block header
   * automated testing framework
 
 **V3 - Add a VM and Smart Contracts**
@@ -91,5 +91,6 @@ Detailed Activity Log Of Completed Work:
   * Consensus algorithm updated to re-process all transactions in all blocks when it finds a longer chain, ensuring local account state consistent with global account state on other nodes
 * Transaction lifecyle
   * txn created -> txn validated -> txn added to pending pool -> txn selected for block by miner -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool -> block broadcast to the network -> receiving block processes txn state
+* Merkle trie and state root added to each block's header enabling the receiving nodes (after a new block is broadcast) to quickly validate the integrity of the block
 * Miner algorithm to select transactions for new blocks
   * Algorithm prioritizes transactions based on their gas, whilst still ensuring txns for the same account are processed in the correct order (using account nonce)
