@@ -91,6 +91,6 @@ Detailed Activity Log Of Completed Work:
   * Consensus algorithm updated to re-process all transactions in all blocks when it finds a longer chain, ensuring local account state consistent with global account state on other nodes
 * Transaction lifecyle
   * txn created -> txn validated -> txn added to pending pool -> txn selected for block by miner -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool -> block broadcast to the network -> receiving block processes txn state
-* Merkle trie root (txn state) and state trie root (account state) added to each block's header enabling the receiving nodes (after a new block is broadcast) to quickly validate the integrity of the block
+* Merkle trie root (txn state) and state trie root (account state) added to each block enabling the network nodes receiving the new block to quickly validate the integrity of the block. Receiving nodes first simulate the processing of a new blocks transactions to validate the merkle/state roots are correct before updating the blockchain / account state
 * Miner algorithm to select transactions for new blocks
   * Algorithm prioritizes transactions based on their gas, whilst still ensuring txns for the same account are processed in the correct order (using account nonce)
