@@ -7,11 +7,11 @@ const logger = require('../utils/logger');
 class Account {
 
     //These variables represent the account state and must not be updated by methods outside of Account.js
-    constructor(nickname, address) {
+    constructor(nickname, address, balance, nonce) {
         this.nickname = nickname || ''; //default 
-        this.balance = 0; //initial amount for testing
+        this.balance = balance || 0; //initial amount for testing
         this.address = address || uuidv4().split('-').join('');
-        this.nonce = 0 //sequential transaction counter to help prevent double spend
+        this.nonce = nonce || 0 //sequential transaction counter to help prevent double spend
     }
 
     //All changes to account state must be made via an Account method
@@ -58,6 +58,10 @@ class Account {
         logger.info(`Act: ${this.address}: Account nonce incremented to ${this.nonce}`);
     }
 
+    //needed for validating the state root when simulating processing a new block
+    clone() {
+        return new Account(this.nickname, this.address, this.balance, this.nonce);
+    }
 }
 
 module.exports = Account;

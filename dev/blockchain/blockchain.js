@@ -31,20 +31,24 @@ function Blockchain(networkNodeURL) {
     this.maxBlockSize = parseInt(process.env.MAX_BLOCK_SIZE);
     this.blockRewardAmount = parseFloat(process.env.BLOCK_REWARD);
 
-    //create Genesis block with arbitrary values
-    this.chain.push({
-        index: 1,
-        timestamp: 123456789101,
-        nonce: 100,
-        prevBlockHash: 'NA',
-        hash: 'genesisHash',
-        transactions: [],
-    });
-
     //pre-mine, need to seed network with initial funds in an account
     //after the pre-mine the only source of new funds on the network will be block rewards
     this.accounts.push(new Account('genesis-account', '8f1063264ae34c49b8452464704fd900'));
     this.accounts[0].credit(1000);
+
+    //finally create Genesis block
+    this.chain.push({
+        index: 1,
+        timestamp: 304819200000, //23-Aug-1979 ;)
+        nonce: 100,
+        prevBlockHash: 'NA',
+        hash: 'genesisHash',
+        transactions: [],
+        stateRoot: sha256(`${this.accounts[0].address}:${this.accounts[0].balance}-${this.accounts[0].nonce}`),
+        merkleRoot: sha256('') //hash empty string i.e. zero nodes
+    });
+
+    logger.info(`Blockchain initialized and genesis block created: ${JSON.stringify(this.chain[0])}`);
 }
 
 Blockchain.prototype.createNewAccount = function (nickname, address) {
@@ -182,8 +186,10 @@ Blockchain.prototype.mine = function (minerAccAddr) {
 
     const result = {
         ValidBlock: false,  // Assume invalid until proven otherwise
+        Details: null,
         Error: null,
-        Details: null
+        ErrorList: null
+
     };
 
     logger.info('Starting to mine.. Need prevBlock hash, current block data, and nonce');
@@ -209,19 +215,124 @@ Blockchain.prototype.mine = function (minerAccAddr) {
 
     //If sufficient valid transactions remain create new block (2 = block reward + 1)
     if (processedList.length >= 2) {
+        const merkleRoot = this.getMerkleRoot(processedList);
+        const stateRoot = this.getStateRoot(this.accounts);
         const nonce = this.proofOfWork(prevBlockHash, processedList);
         const currentBlockHash = this.hashBlockData(prevBlockHash, processedList, nonce);
-        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, processedList, minerAccAddr);
+        const newBlock = this.createNewBlock(nonce, prevBlockHash, currentBlockHash, processedList, merkleRoot, stateRoot, minerAccAddr);
 
         result.ValidBlock = true;
         result.Details = newBlock;
     } else {
         logger.info('Block creation failed. Txn count below threshold. Insufficient valid txns identified')
         result.Error = "Issue with processing transactions selected for block, no valid transactions. New block aborted";
-        result.Details = processedListObj.errorList;
+        result.ErrorList = processedListObj.errorList;
     }
 
     return result;
+}
+
+Blockchain.prototype.getMerkleRoot = function (txnList) {
+
+    logger.info('Creating merkle root of new block transactions');
+    const txnHashes = txnList.map(txn =>
+        hashTxnState(txn.txnID, txn.amount, txn.debitAddress, txn.creditAddress, txn.nonce)
+    );
+
+    logger.info(`Txn states hashed: ${txnHashes}, length: ${txnHashes.length}`);
+    const merkleRoot = this.createMerkleTreeRoot(txnHashes);
+
+    logger.info(`Txn merkle root finished: ${merkleRoot}`);
+    return merkleRoot;
+
+    function hashTxnState(id, amount, debitAddress, creditAddress, nonce) {
+        return sha256(`${id}:${amount}:${debitAddress}:${creditAddress}:${nonce}`);
+    }
+}
+
+Blockchain.prototype.getStateRoot = function (accountList) {
+
+    logger.info('Creating new state root of blockchain account state');
+    // Hash the state of each account
+    const accountHashes = accountList.map(account =>
+        hashAccountState(account.address, account.balance, account.nonce)
+    );
+
+    // Sort the array of account hashes lexicographically before creating the Merkle root
+    const sortedAccountHashes = accountHashes.sort((a, b) => {
+        if (a < b) return -1;
+        if (a > b) return 1;
+        return 0;
+    });
+
+    logger.info(`Account states hashed: ${sortedAccountHashes}, length: ${sortedAccountHashes.length}`);
+    const stateRoot = this.createMerkleTreeRoot(sortedAccountHashes);
+
+    logger.info(`Account state root finished: ${stateRoot}`);
+    return stateRoot;
+
+    function hashAccountState(accountAddress, balance, nonce) {
+        return sha256(`${accountAddress}:${balance}-${nonce}`);
+    }
+}
+
+Blockchain.prototype.checkStateRoot = function (txnList, minerAddr) {
+
+    logger.info('Checking state root for received block');
+    let stateRoot = null;
+    //when processing an incoming new block (mined by another node) to validate the new blocks state root we only want to to SIMULATE updating the account state
+    //no updates should be made to the real this.accounts[] state, in case we need to reject the new block
+    //so we clone the account state, and update the cloned accounts
+    logger.info('Cloning blockchain accounts to simulate processing new blocks txns');
+    const tempAccounts = this.accounts.map(account =>
+        account.clone()
+    );
+
+    //Because this is a simulation make sure accounts exist, if not create them in cloned account list
+    txnList.forEach(txn => {
+        let debitAddress = tempAccounts.find(account => account.address === txn.debitAddress);
+        if (!debitAddress && txn.debitAddress !== 'system') {
+            logger.info(`Creating temp debit address clone: ${txn.debitAddress}`);
+            tempAccounts.push(new Account('', txn.debitAddress));
+        }
+        let creditAddress = tempAccounts.find(account => account.address === txn.creditAddress);
+        if (!creditAddress) {
+            logger.info(`Creating temp credit address clone: ${txn.creditAddress}`);
+            tempAccounts.push(new Account('', txn.creditAddress));
+        }
+    });
+
+    logger.info('Simulating processing new blocks txns');
+    const processingResult = this.processSelectedTransactions(txnList, minerAddr, tempAccounts);
+    if (processingResult.processedList.length >= 2) {
+        logger.info('Simulation success, creating state root for simulation');
+        stateRoot = this.getStateRoot(tempAccounts);
+        logger.info('Returning simulated state root to new block validation');
+        return stateRoot;
+    }
+    //issue simulating new block's txn processing
+    logger.error('Issue with new block simulation, could not create state root');
+    return stateRoot;
+}
+
+//Take array of hashed data, create merkleTrie and return root hash
+Blockchain.prototype.createMerkleTreeRoot = function (hashArr) {
+
+    while (hashArr.length > 1) {
+        if (hashArr.length % 2 !== 0) {
+            hashArr.push(hashArr[hashArr.length - 1]);  // Duplicate last hash if odd number
+        }
+
+        const newLevel = [];
+        for (let i = 0; i < hashArr.length; i += 2) {
+            const combinedHash = sha256(hashArr[i] + hashArr[i + 1]);
+            newLevel.push(combinedHash);
+        }
+
+        hashArr = newLevel;  // Move to next level
+    }
+
+    return hashArr[0];  // Return the final root hash
 }
 
 //Find the nonce, that when hashed with the previous block's hash, and the current blocks data,  
@@ -251,7 +362,7 @@ Blockchain.prototype.hashBlockData = function (prevBlockHash, currentBlockData, 
 }
 
 //Create new block, create blockReward, add new block to chain, return new block
-Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, txnList, nodeAccAddress) {
+Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlockHash, txnList, merkleRoot, stateRoot, nodeAccAddress) {
 
     //create newBlock object
     const newBlock = {
@@ -261,7 +372,9 @@ Blockchain.prototype.createNewBlock = function (nonce, prevBlockHash, currentBlo
         nonce: nonce,
         hash: currentBlockHash,
         prevBlockHash: prevBlockHash,
-        miner: nodeAccAddress
+        miner: nodeAccAddress,
+        stateRoot: stateRoot,
+        merkleRoot: merkleRoot
     };
 
     //Remove transactions selected for this block from pending pool
@@ -299,57 +412,78 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
     //make sure the new block has the correct index, equal to last block + 1
     const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
 
-    let processingResult;
+    let processingResult, correctStateRoot, correctMerkleRoot;
     //if new block has correct hash, i.e. chained hashes are in tact
     if (correctHash && correctIndex) {
         //process transactions in new block
         const txnList = newBlock.transactions;
-        processingResult = this.processSelectedTransactions(txnList, newBlock.miner);
 
-        if (processingResult.errorList === null || processingResult.errorList.length === 0) {
+        //before we start processing the transactions check the new block's state/txn roots
+        const stateRoot = this.checkStateRoot(txnList, newBlock.miner);
+        correctStateRoot = stateRoot === newBlock.stateRoot;
+        const merkleRoot = this.getMerkleRoot(txnList);
+        correctMerkleRoot = merkleRoot === newBlock.merkleRoot;
 
-            this.chain.push(newBlock);
+        logger.info(`stateRoot: ${correctStateRoot}, merleRoot: ${correctMerkleRoot}`);
 
-            //Remove transactions received in this block from pending pool
-            txnList.forEach(txn => {
-                const index = this.pendingTransactions.findIndex(t => t.txnID === txn.txnID);
-                if (index !== -1) {
-                    this.pendingTransactions.splice(index, 1); // Remove the transaction from pending pool
-                }
-            });
+        //if state/merkle roots appear correct we can process the txns
+        if (correctStateRoot && correctMerkleRoot) {
 
-            const success = {
-                status: 'success',
-                note: "new Block processed and successfully added to chain",
-                newBlock: newBlock
-            };
-            logger.info(`New block accepted ${JSON.stringify(success)}`);
-            return success;
+            processingResult = this.processSelectedTransactions(txnList, newBlock.miner);
+
+            if (processingResult.errorList === null || processingResult.errorList.length === 0) {
+
+                this.chain.push(newBlock);
+
+                //Remove transactions received in this block from pending pool
+                txnList.forEach(txn => {
+                    const index = this.pendingTransactions.findIndex(t => t.txnID === txn.txnID);
+                    if (index !== -1) {
+                        this.pendingTransactions.splice(index, 1); // Remove the transaction from pending pool
+                    }
+                });
+
+                const success = {
+                    status: 'success',
+                    note: "new Block processed and successfully added to chain",
+                    newBlock: newBlock
+                };
+                logger.info(`New block accepted ${JSON.stringify(success)}`);
+                return success;
+            }
         }
     }
-
     const failure = {
         status: "failed",
         note: 'new block failed validation, not added to chain',
         correctHash: correctHash,
         correctIndex: correctIndex,
+        correctStateRoot: correctStateRoot,
+        correctMerkleRoot: correctMerkleRoot,
         failedBlock: newBlock,
         errorList: processingResult ? processingResult.errorList : null
     };
-    logger.info(`New block rejected ${JSON.stringify(failure)}`);
+    logger.error(`New block rejected ${JSON.stringify(failure)}`);
 
     return failure;
 }
 
 //Re-validate and process transactions in new block
-Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr) {
+//While we could find the miner address from the block reward in txnList, we would have to search for the block reward txn
+//And given we have the miner addr handy from creating the block it's easier to also pass the address here
+Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr, accountList) {
 
-    logger.info('Starting re-validation of selected transactions before creating block');
+    logger.info('Starting re-validation of selected transactions before processing block');
 
     const processingResult = {
         processedList: null,
         errorList: null
     };
+    //if no accountList is passed, default to updating the global account state
+    if (!accountList) {
+        logger.info(`We are NOT in simulation mode, updating global account state`);
+        accountList = this.accounts;
+    }
 
     // Re-validate transactions selected from pending pool
     let processedList = txnList.filter(txn => {
@@ -359,9 +493,9 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr)
         //if still valid execute change of state contained in transaction
         if (validationResult.ValidTxn) {
 
-            const debitAddressAcc = this.accounts.find(account => account.address === txn.debitAddress);
-            let creditAddressAcc = this.accounts.find(account => account.address === txn.creditAddress);
-            let minerAddrAcc = this.accounts.find(account => account.address === minerAddr);
+            const debitAddressAcc = accountList.find(account => account.address === txn.debitAddress);
+            let creditAddressAcc = accountList.find(account => account.address === txn.creditAddress);
+            let minerAddrAcc = accountList.find(account => account.address === minerAddr);
 
             if (txn.debitAddress !== 'system') {
                 //check transaction is being processed in the correct sequence as per debit account nonce
@@ -378,6 +512,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr)
 
                 // debit successful, increment nonce and credit miner with txn gas fee
                 debitAddressAcc.incrementTransactionCount();
+
                 if (minerAddrAcc) {
                     minerAddrAcc.credit(txn.gas);
                 } else {
@@ -393,6 +528,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr)
                 creditAddressAcc = this.createNewAccount("", txn.creditAddress);
                 creditAddressAcc.credit(txn.amount);
             }
+
             return true;  // Transaction valid AND processed successfully
         } else {
             return false; // Transaction validation failed
@@ -408,7 +544,6 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr)
 
         processingResult.errorList = errorList;
     }
-
     processingResult.processedList = processedList;
     return processingResult;
 }

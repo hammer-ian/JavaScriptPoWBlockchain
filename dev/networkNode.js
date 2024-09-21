@@ -52,7 +52,6 @@ app.use((req, res, next) => {
 const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 const nodeId = `node-${uuidv4().split('-').join('')}`; //generate unique node id
-const nodeAcc = blockchain.createNewAccount(nodeId);
 const ENVIRONMENT = process.env.ENVIRONMENT;
 
 /**********************************
@@ -145,52 +144,93 @@ app.post('/internal/receive-new-transaction', function (req, res) {
     }
 });
 
-app.get('/mine', function (req, res) {
+app.get('/mine', async function (req, res) {
 
-    logger.info('Request received to mine..');
+    try {
+        logger.info('Request received to mine..');
+        //initialise node credit account to receive block reward
+        const nodeAcc = blockchain.createNewAccount(nodeId);
+        const result = blockchain.mine(nodeAcc.address);
+        if (result.ValidBlock) {
+            const registerNewBlockPromises = [];
+            logger.info(`Mine successful locally, now starting to broadcast new block`);
+            blockchain.networkNodes.forEach(networkNodeUrl => {
+                const requestOptions = {
+                    uri: networkNodeUrl + '/internal/receive-new-block',
+                    method: 'POST',
+                    body: { newBlock: result.Details },
+                    json: true
+                };
+                //Add each register request to array
+                //calling rp (request-promise) wraps the request in a Promise before adding it to the array
+                registerNewBlockPromises.push(
+                    rp(requestOptions)
+                        .then(response => {
+                            if (response.status === 'success') {
+                                logger.info(`Block processed successfully by ${networkNodeUrl}`);
+                            } else {
+                                logger.error(`Block delivered but failed to process on ${networkNodeUrl}: Check response object for more detail: ${JSON.stringify(response)}`);
+                                return { networkNodeUrl, status: response.status, fullResponse: response };
+                            }
+                        })
+                        .catch(err => {
+                            logger.error(`Error sending block to ${networkNodeUrl}: ${err.message}`);
+                            return { networkNodeUrl, error: err.message, status: 'failed' };
+                        })
+                );
+            });
+            const deliveryResults = await Promise.all(registerNewBlockPromises);
+            logger.info(`Broadcast of new block deliveryResults: ${JSON.stringify(deliveryResults)}`);
+            const failedNodes = deliveryResults.filter(result => result && result.status === 'failed');
 
-    const result = blockchain.mine(nodeAcc.address);
-    if (result.ValidBlock) {
-        const registerNewBlockPromises = [];
-
-        blockchain.networkNodes.forEach(networkNodeUrl => {
-            const requestOptions = {
-                uri: networkNodeUrl + '/internal/receive-new-block',
-                method: 'POST',
-                body: { newBlock: result.Details },
-                json: true
-            };
-            //Add each register request to array
-            //calling rp (request-promise) wraps the request in a Promise before adding it to the array
-            registerNewBlockPromises.push(rp(requestOptions));
-        });
-
-        Promise.all(registerNewBlockPromises)
-            .then(data => {
-                res.json({
-                    note: "new block mined and broadcast successfully",
+            if (failedNodes.length > 0) {
+                logger.error(`Issues encountered: ${JSON.stringify([...failedNodes])}`);
+                res.status(207).json({
+                    note: "New block mined and broadcast, but some nodes had issues",
+                    failedNodes: failedNodes,
                     newBlock: result.Details
                 });
-            });
-    } else {
-        res.status(400).json({
-            note: result.Error,
-            details: result.Details
-        })
+            } else {
+                logger.info(`New block broadcasted successfully to all nodes`);
+                res.status(200).json({
+                    note: "New block mined and broadcast successfully",
+                    newBlock: result.Details
+                });
+            }
+        } else {
+            logger.error(`ValidBlock: ${result.ValidBlock}, Error: ${result.Error}, ErrorList: ${JSON.stringify(result.ErrorList)}`);
+            res.status(400).json({
+                note: result.Error,
+                details: result.ErrorList
+            })
+        }
+    } catch (error) {
+        // Log the error for debugging purposes
+        logger.error(`Error occurred during mining: ${error.message}`, { error });
+
+        // Return a 500 status to indicate a server error
+        res.status(500).json({
+            note: 'An error occurred during mining or broadcasting the new block.',
+            error: error.message
+        });
     }
 });
 
 app.post('/internal/receive-new-block', function (req, res) {
 
-    logger.info('Received new block from network..');
+    logger.info(`Received new block from network..${JSON.stringify(req.body.newBlock)}`);
     const newBlock = req.body.newBlock;
 
     const result = blockchain.receiveNewBlock(newBlock);
+
     if (result.status === 'success') {
-        res.json(result);
+        logger.info(`New block processed successfully ${JSON.stringify(result)}`);
+        res.status(200).json(result);
         return;
     }
-    res.status(400).json(result);
+    //use 202, new block received, but processing failed
+    logger.error(`Processing of new block failed ${JSON.stringify(result)}`);
+    res.status(202).json(result);
 });
 
 /* Each new node (e.g. :3009) registers itself with ONE existing node (e.g. 3001), and asks that
