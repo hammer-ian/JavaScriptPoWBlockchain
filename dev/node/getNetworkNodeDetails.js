@@ -43,7 +43,24 @@ const getNetworkNodeDetails = () => {
     };
 };
 
+const getNodeCreditAddress = () => {
+
+    const serviceName = process.env.SERVICE_NAME;
+    logger.info(`Returning default account address for node: ${serviceName}`);
+
+    if (serviceName === 'node1') {
+        return process.env.NODE1_ADDRESS;
+
+    } else if (serviceName === 'node2') {
+        return process.env.NODE2_ADDRESS;
+
+    } else if (serviceName === 'node3') {
+        return process.env.NODE3_ADDRESS;
+    }
+};
+
 module.exports = {
-    getNetworkNodeDetails
+    getNetworkNodeDetails,
+    getNodeCreditAddress
 };
 

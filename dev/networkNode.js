@@ -16,7 +16,7 @@ const { v4: uuidv4 } = require('uuid'); //generate unique identifiers
 //Import environment config and internal modules
 require('dotenv').config();
 const logger = require('./utils/logger');
-const { getNetworkNodeDetails } = require('./node/getNetworkNodeDetails');
+const { getNetworkNodeDetails, getNodeCreditAddress } = require('./node/getNetworkNodeDetails');
 const { registerThisNode } = require('./node/registerThisNode');
 const { deRegisterUnhealthyNodes } = require('./node/deregisterUnhealthyNodes');
 const Blockchain = require('./blockchain/blockchain');
@@ -148,9 +148,17 @@ app.get('/mine', async function (req, res) {
 
     try {
         logger.info('Request received to mine..');
-        //initialise node credit account to receive block reward
-        const nodeAcc = blockchain.createNewAccount(nodeId);
+        //retrieve default node address
+        const nodeAccAddress = getNodeCreditAddress();
+        let nodeAcc = blockchain.accounts.find(account => account.address === nodeAccAddress);
+        //if account has not been created
+        if (!nodeAcc) {
+            //create Account for node using default address
+            nodeAcc = blockchain.createNewAccount(nodeId, nodeAccAddress);
+        }
+        //Start mining
         const result = blockchain.mine(nodeAcc.address);
+
         if (result.ValidBlock) {
             const registerNewBlockPromises = [];
             logger.info(`Mine successful locally, now starting to broadcast new block`);

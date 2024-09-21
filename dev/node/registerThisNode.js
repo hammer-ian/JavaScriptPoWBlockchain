@@ -140,7 +140,7 @@ const getSeedNodesDESKTOP = async (networkNodeDetails) => {
     } else if (serviceName === 'node2') {
         const index = seedNodeArray.indexOf('host.docker.internal:3002');
         seedNodeArray.splice(index, 1);
-    } else if (serviceName === 'node2') {
+    } else if (serviceName === 'node3') {
         const index = seedNodeArray.indexOf('host.docker.internal:3003');
         seedNodeArray.splice(index, 1);
     }

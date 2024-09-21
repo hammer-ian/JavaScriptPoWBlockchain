@@ -290,13 +290,13 @@ Blockchain.prototype.checkStateRoot = function (txnList, minerAddr) {
 
     //Because this is a simulation make sure accounts exist, if not create them in cloned account list
     txnList.forEach(txn => {
-        let debitAddress = tempAccounts.find(account => account.address === txn.debitAddress);
-        if (!debitAddress && txn.debitAddress !== 'system') {
+        let debitAcc = tempAccounts.find(account => account.address === txn.debitAddress);
+        if (!debitAcc && txn.debitAddress !== 'system') {
             logger.info(`Creating temp debit address clone: ${txn.debitAddress}`);
             tempAccounts.push(new Account('', txn.debitAddress));
         }
-        let creditAddress = tempAccounts.find(account => account.address === txn.creditAddress);
-        if (!creditAddress) {
+        let creditAcc = tempAccounts.find(account => account.address === txn.creditAddress);
+        if (!creditAcc) {
             logger.info(`Creating temp credit address clone: ${txn.creditAddress}`);
             tempAccounts.push(new Account('', txn.creditAddress));
         }
