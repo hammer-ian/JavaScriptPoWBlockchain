@@ -4,12 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "node_1": "nodemon --watch dev -e js dev/networkNode.js 3001 http://localhost:3001",
-    "node_2": "nodemon --watch dev -e js dev/networkNode.js 3002 http://localhost:3002",
-    "node_3": "nodemon --watch dev -e js dev/networkNode.js 3003 http://localhost:3003",
-    "node_4": "nodemon --watch dev -e js dev/networkNode.js 3004 http://localhost:3004",
-    "node_5": "nodemon --watch dev -e js dev/networkNode.js 3005 http://localhost:3005"
+    "test": "mocha dev/test"
   },
   "author": "hammer",
   "license": "ISC",
@@ -22,11 +17,14 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "joi": "^17.13.3",
-    "nodemon": "^3.1.4",
     "request": "^2.88.2",
     "request-promise": "^4.2.6",
     "sha256": "^0.2.0",
     "uuid": "^10.0.0",
     "winston": "^3.14.2"
+  },
+  "devDependencies": {
+    "chai": "^5.1.1",
+    "mocha": "^10.7.3"
   }
 }
