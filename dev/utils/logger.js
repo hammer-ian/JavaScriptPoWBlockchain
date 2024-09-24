@@ -7,15 +7,26 @@ require('dotenv').config();
 const port = process.env.PORT;
 const logDirPath = process.env.LOG_DIR_PATH;
 const fileName = process.env.LOGFILE_NAME || 'blockchain-node.log';
+const loggingStreamEnabled = process.env.LOGGING_STREAM_ENABLED === 'true';
 
-//Create logtail client
-const logtail = new Logtail(process.env.BETTER_STACK_SOURCE);
+// logtail client for streaming
+let logtail;
+// Winston logger
+const loggerTransports = [];
 
+if (loggingStreamEnabled) {
+  logtail = new Logtail(process.env.BETTER_STACK_SOURCE);
+  // Add Logtail transport if log streaming is enabled
+  loggerTransports.push(new LogtailTransport(logtail));
+}
+
+//Build filepath for logging to local file
 if (!port || !logDirPath) {
   throw new Error('Missing environment variables: PORT or LOG_DIR_PATH');
 }
-
 const logFilePath = path.join(logDirPath, fileName);
+loggerTransports.push(new transports.File({ filename: logFilePath }));
+
 
 const getCaller = format((info) => {
   const stack = new Error().stack.split('\n');
@@ -45,10 +56,7 @@ const logger = createLogger({
     format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),  // Add timestamps
     format.json()
   ),
-  transports: [
-    new LogtailTransport(logtail),
-    new transports.File({ filename: logFilePath })  // Output to file
-  ],
+  transports: loggerTransports,
 });
 
 // Function to update the blockchainNode metadata dynamically
