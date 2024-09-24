@@ -11,7 +11,7 @@ const newTransactionSchema = Joi.object({
 const validateTransactionJSON = (req, res, next) => {
     const { error } = newTransactionSchema.validate(req.body);
     if (error) {
-        return res.status(400).send(error.details[0].message);
+        return res.status(400).send({ error: `${error.details[0].message}` });
     }
     next();
 };

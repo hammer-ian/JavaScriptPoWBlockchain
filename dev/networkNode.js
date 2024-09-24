@@ -52,7 +52,6 @@ app.use((req, res, next) => {
 const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 const nodeId = `node-${uuidv4().split('-').join('')}`; //generate unique node id
-const ENVIRONMENT = process.env.ENVIRONMENT;
 
 /**********************************
   
@@ -83,44 +82,55 @@ app.get('/healthcheck', async (req, res) => {
 app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) {
     logger.info('Received transaction to broadcast, creating new transaction object');
 
-    const nonce = blockchain.getLatestNonce(req.body.debitAddress);
+    try {
+        const nonce = blockchain.getLatestNonce(req.body.debitAddress);
 
-    const resultObj = blockchain.createNewTransaction(
-        req.body.debitAddress,
-        req.body.creditAddress,
-        req.body.amount,
-        req.body.gas,
-        nonce
-    );
+        const resultObj = blockchain.createNewTransaction(
+            req.body.debitAddress,
+            req.body.creditAddress,
+            req.body.amount,
+            req.body.gas,
+            nonce
+        );
 
-    //if returning object has a transaction ID property, transaction created successfully
-    if (resultObj.txnID) {
-        logger.info(`newTransaction object created ${JSON.stringify(resultObj)}`);
+        //if returning object has a transaction ID property, transaction created successfully
+        if (resultObj.txnID) {
+            logger.info(`newTransaction object created ${JSON.stringify(resultObj)}`);
 
-        //Array to hold the new transaction broadcast requests to be send to other nodes
-        const requestTxnPromises = [];
+            //Array to hold the new transaction broadcast requests to be send to other nodes
+            const requestTxnPromises = [];
 
-        //build the "new transaction" broadcast request for each of the other nodes
-        blockchain.networkNodes.forEach(networkNodeUrl => {
-            const requestOptions = {
-                uri: networkNodeUrl + '/internal/receive-new-transaction',
-                method: 'POST',
-                body: resultObj,
-                json: true
-            };
-            //add each new transaction request to array
-            requestTxnPromises.push(rp(requestOptions));
-        });
-
-        Promise.all(requestTxnPromises)
-            .then(data => {
-                res.json({ note: "new transaction created and broadcast successfully" });
+            //build the "new transaction" broadcast request for each of the other nodes
+            blockchain.networkNodes.forEach(networkNodeUrl => {
+                const requestOptions = {
+                    uri: networkNodeUrl + '/internal/receive-new-transaction',
+                    method: 'POST',
+                    body: resultObj,
+                    json: true
+                };
+                //add each new transaction request to array
+                requestTxnPromises.push(rp(requestOptions));
             });
-    } else {
-        logger.info(`Transaction creation failed ${JSON.stringify(resultObj)}`);
+
+            Promise.all(requestTxnPromises)
+                .then(data => {
+                    res.json({ note: "new transaction created and broadcast successfully" });
+                });
+        } else {
+            logger.info(`Transaction creation failed ${JSON.stringify(resultObj)}`);
+            res.status(400).json({
+                note: "transaction creation failed",
+                result: resultObj
+            });
+        }
+    } catch (error) {
+        // Log the error for debugging purposes
+        logger.error(`Error occurred during transaction creation and validation: ${error.message}`, { error });
+
+        // Return a 500 status to indicate a server error
         res.status(400).json({
-            note: "transaction creation failed",
-            result: resultObj
+            note: 'Error occurred during transaction creation and validation',
+            error: error.message
         });
     }
 });
@@ -379,3 +389,5 @@ app.listen(networkNodeDetails.networkNodePort, '0.0.0.0', function () {
     logger.info(`Listening on port ${networkNodeDetails.networkNodePort}..`);
 
 });
+//export app module to support testing
+module.exports = app;

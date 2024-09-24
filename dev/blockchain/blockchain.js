@@ -33,7 +33,7 @@ function Blockchain(networkNodeURL) {
 
     //pre-mine, need to seed network with initial funds in an account
     //after the pre-mine the only source of new funds on the network will be block rewards
-    this.accounts.push(new Account('genesis-account', '8f1063264ae34c49b8452464704fd900'));
+    this.accounts.push(new Account('genesis-account', process.env.GENESIS_PRE_MINE_ACC));
     this.accounts[0].credit(1000);
 
     //finally create Genesis block
