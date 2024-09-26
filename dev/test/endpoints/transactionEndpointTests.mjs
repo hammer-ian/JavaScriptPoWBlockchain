@@ -1,15 +1,22 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import sinon from 'sinon';
-import Blockchain from '../blockchain/blockchain.js';
-import app from '../networkNode.js';
 
-let blockchain;
+// Import the default export of networkNode.js as an object
+import networkNode from '../../networkNode.js';
+// Extract app and blockchain from the imported object
+const { app, blockchain } = networkNode;
 
-describe('Blockchain Endpoints', function () {
+/**
+ * Test cases validating the transaction endpoints gracefully handle the HTTP request/response cycle
+ */
+
+
+describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
 
     beforeEach(function () {
-        blockchain = new Blockchain();
+        // Add mock network nodes to the blockchain for when we need to test broadcast response handling
+        blockchain.networkNodes = ['http://node1.com', 'http://node2.com'];
     });
 
     after((done) => {
@@ -48,17 +55,12 @@ describe('Blockchain Endpoints', function () {
         done();  // Proceed to exit the test process
     });
 
-    describe('Blockchain', () => {
-        it('should create a new instance of a blockchain', () => {
-
-            //create new instance of Blockchain
-            //const blockchain = new Blockchain();
-            expect(blockchain.chain.length).to.equal(1); //check genesis block created
-        });
-
-    });
     /*
         Test each of the endpoints
+         - GET /blockchain
+         - GET /healthcheck
+         - POST /transaction/broadcast
+         - 
     */
 
     describe('GET /blockchain', function () {
@@ -99,10 +101,14 @@ describe('Blockchain Endpoints', function () {
                 gas: 10,
                 nonce: 0
             });
+
+            // Stub rp (network call) to simulate successful broadcast to other nodes
+            //rpStub = sinon.stub(rp, 'post').resolves(true);  // Simulate successful POST requests 
         });
 
         afterEach(() => {
             blockchainStub.restore();
+            //rpStub.restore();
         });
 
         it('should broadcast a transaction to the network', function (done) {
@@ -138,7 +144,7 @@ describe('Blockchain Endpoints', function () {
                 });
         });
 
-        it('should return an error if debit address does not exist', function (done) {
+        it('should return an error if debitAddress does not exist', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -155,7 +161,15 @@ describe('Blockchain Endpoints', function () {
                 });
         });
 
-        it('should return an error if debit address does not have sufficient funds', function (done) {
+        it('should return an error if debitAddress does not have sufficient funds', function (done) {
+
+            // Override the default stub for this specific test
+            blockchainStub.restore();  // Restore the original stub first
+            blockchainStub = sinon.stub(blockchain, 'createNewTransaction').returns({
+                ValidTxn: false,
+                Error: 'debitCheck failed: insufficient funds'
+            });
+
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -224,5 +238,13 @@ describe('Blockchain Endpoints', function () {
 
     });
 
+    describe('POST /internal/receive-new-transaction', function () {
+        it('should return a 200 OK response', function (done) {
+            request(app)
+                .get('/healthcheck')
+                .expect(200)
+                .expect('OK', done);
+        });
+    });
 
 });

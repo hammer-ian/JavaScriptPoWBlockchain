@@ -389,5 +389,8 @@ app.listen(networkNodeDetails.networkNodePort, '0.0.0.0', function () {
     logger.info(`Listening on port ${networkNodeDetails.networkNodePort}..`);
 
 });
-//export app module to support testing
-module.exports = app;
+//export app module and blockchain instance to support testing
+module.exports = {
+    app,
+    blockchain
+}

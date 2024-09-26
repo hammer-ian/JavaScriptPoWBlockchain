@@ -135,6 +135,14 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas) 
         logger.info('Transaction is block reward. Block reward is correct');
         resultObj.ValidTxn = true;
         return resultObj;
+    } else if (debitAddress === 'system' && amount !== this.blockRewardAmount) {
+        logger.info('Transaction is block reward. Block reward NOT correct');
+        resultObj.Error = `block reward is not correct`;
+        resultObj.Details = {
+            TxnBlockReward: amount,
+            CorrectBlockReward: this.blockRewardAmount
+        }
+        return resultObj;
     }
 
     //check debitAcc address exist

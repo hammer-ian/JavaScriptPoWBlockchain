@@ -17,11 +17,6 @@ const validateTransactionJSON = (req, res, next) => {
 };
 
 
-
-
-
-
-
 module.exports = {
     validateTransactionJSON
 };
