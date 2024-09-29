@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import sinon from 'sinon';
+import nock from 'nock';
 
 // Import the default export of networkNode.js as an object
 import networkNode from '../../networkNode.js';
@@ -10,49 +11,20 @@ const { app, blockchain } = networkNode;
 /**
  * Test cases validating the transaction endpoints gracefully handle the HTTP request/response cycle
  */
-
-
 describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
 
-    beforeEach(function () {
-        // Add mock network nodes to the blockchain for when we need to test broadcast response handling
-        blockchain.networkNodes = ['http://node1.com', 'http://node2.com'];
-    });
+    before(function () {
+        // Add mock network nodes to the blockchain to simlulate other nodes existing on the network
+        blockchain.networkNodes.push('http://node1.com:3001');
+        blockchain.networkNodes.push('http://node2.com:3001');
 
-    after((done) => {
-        // Log active handles before cleanup (optional, for debugging)
-        console.log('Closing active handles before exiting');
-
-        // Function to forcibly close all open TCP connections
-        function closeAllOpenConnections() {
-            const activeHandles = process._getActiveHandles();
-            const activeRequests = process._getActiveRequests();
-
-            // Close active handles (e.g., sockets, streams)
-            activeHandles.forEach((handle) => {
-                if (handle.close) {
-                    handle.close();  // Close the handle if possible
-                }
-                if (handle.destroy) {
-                    handle.destroy();  // Destroy the handle if possible
-                }
-            });
-
-            // End or abort any pending HTTP/TCP requests
-            activeRequests.forEach((request) => {
-                if (request.abort) {
-                    request.abort();  // Abort the request if possible
-                }
-                if (request.end) {
-                    request.end();  // End the request if possible
-                }
-            });
-
-            console.log('Active handles closed');
-        }
-
-        closeAllOpenConnections(); // Force close all active connections
-        done();  // Proceed to exit the test process
+        // Mock the consensus checks that happen when a node starts to simulate node responses
+        // We will explicitly test /consensus endpoint elsewhere
+        blockchain.networkNodes.forEach((networkNodeUrl) => {
+            nock(networkNodeUrl)
+                .get('/consensus')
+                .reply(200, { chain: [], pendingTransactions: [] });  // Simulate an empty blockchain for each node
+        });
     });
 
     /*
@@ -60,7 +32,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
          - GET /blockchain
          - GET /healthcheck
          - POST /transaction/broadcast
-         - 
+         - POST /internal/receive-new-transaction
     */
 
     describe('GET /blockchain', function () {
@@ -91,7 +63,8 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
 
     describe('POST /transaction/broadcast', function () {
         let blockchainStub;
-        //const blockchain = new Blockchain();
+        let nockScopes = []; // Array to hold all nock scopes
+
         beforeEach(() => {
             blockchainStub = sinon.stub(blockchain, 'createNewTransaction').returns({
                 txnID: 'testTxnID',
@@ -102,13 +75,21 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 nonce: 0
             });
 
-            // Stub rp (network call) to simulate successful broadcast to other nodes
-            //rpStub = sinon.stub(rp, 'post').resolves(true);  // Simulate successful POST requests 
+            blockchain.networkNodes.forEach((networkNodeUrl) => {
+                // Mock the POST request to /internal/receive-new-transaction
+                const scope = nock(networkNodeUrl)
+                    .post('/internal/receive-new-transaction')
+                    .reply(200, { note: 'transaction added to pending pool' });
+
+                // Store the scope for later verification
+                nockScopes.push(scope);
+            });
         });
 
         afterEach(() => {
             blockchainStub.restore();
-            //rpStub.restore();
+            nock.cleanAll();  // Clear all nocks after each test
+            nockScopes = []; // Clear nock scopes
         });
 
         it('should broadcast a transaction to the network', function (done) {
@@ -122,8 +103,17 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 })
                 .expect(200)
                 .end(function (err, res) {
-                    if (err) return done(err);
-                    expect(res.body.note).to.equal('new transaction created and broadcast successfully');
+                    if (err) {
+                        return done(err);
+                    }
+                    expect(res.body.note, 'Failed to verify successfuly broadcast response').to.equal('new transaction created and broadcast successfully');
+
+                    // Verify that nock intercepted the requests to `/internal/receive-new-transaction`
+                    // Verify that each nock scope has been called exactly once
+                    nockScopes.forEach((scope, index) => {
+                        expect(scope.isDone(), `Network request to node ${index + 1} was not intercepted as expected`).to.be.true;
+                    });
+
                     done();
                 });
         });
@@ -163,12 +153,11 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
 
         it('should return an error if debitAddress does not have sufficient funds', function (done) {
 
-            // Override the default stub for this specific test
-            blockchainStub.restore();  // Restore the original stub first
-            blockchainStub = sinon.stub(blockchain, 'createNewTransaction').returns({
-                ValidTxn: false,
-                Error: 'debitCheck failed: insufficient funds'
-            });
+            /* Override the default stub for this specific test. restore() effectively removes 
+             the createNewTransaction stub set in beforeEach() so the stubbed method returns to it's 
+             original behaviour
+             */
+            blockchainStub.restore();
 
             request(app)
                 .post('/transaction/broadcast')
@@ -235,7 +224,6 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                     done();
                 });
         });
-
     });
 
     describe('POST /internal/receive-new-transaction', function () {

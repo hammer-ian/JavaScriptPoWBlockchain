@@ -1,11 +1,7 @@
 import { expect } from 'chai';
-import request from 'supertest';
-import sinon from 'sinon';
 
 // Import the default export of networkNode.js as an object
-import networkNode from '../../networkNode.js';
-// Extract app and blockchain from the imported object
-const { app, blockchain } = networkNode;
+import Blockchain from '../../blockchain/blockchain.js';
 
 /**
  * Test cases validating the blockchain create transaction logic 
@@ -13,56 +9,29 @@ const { app, blockchain } = networkNode;
  * Blockchain consensus, explorer, mining will be seperated into other test modules
  */
 
-describe('Blockchain Internal Business Logic', function () {
+describe('Blockchain Create Transaction Business Logic', function () {
 
-    beforeEach(function () {
-        //not doing anything at the moment
-    });
+    //create a new instance of blockchain
+    let blockchain;
+    before(function () {
+        blockchain = new Blockchain('http://localhost:3001'); //not required
+    })
 
-    after((done) => {
-        // Log active handles before cleanup (optional, for debugging)
-        console.log('Closing active handles before exiting');
+    describe('Create instance of Blockchain', () => {
 
-        // Function to forcibly close all open TCP connections
-        function closeAllOpenConnections() {
-            const activeHandles = process._getActiveHandles();
-            const activeRequests = process._getActiveRequests();
-
-            // Close active handles (e.g., sockets, streams)
-            activeHandles.forEach((handle) => {
-                if (handle.close) {
-                    handle.close();  // Close the handle if possible
-                }
-                if (handle.destroy) {
-                    handle.destroy();  // Destroy the handle if possible
-                }
-            });
-
-            // End or abort any pending HTTP/TCP requests
-            activeRequests.forEach((request) => {
-                if (request.abort) {
-                    request.abort();  // Abort the request if possible
-                }
-                if (request.end) {
-                    request.end();  // End the request if possible
-                }
-            });
-
-            console.log('Active handles closed');
-        }
-
-        closeAllOpenConnections(); // Force close all active connections
-        done();  // Proceed to exit the test process
-    });
-
-    describe('Blockchain', () => {
         it('should create a new instance of a blockchain', () => {
 
             //create new instance of Blockchain
-            //const blockchain = new Blockchain();
-            expect(blockchain.chain.length).to.equal(1); //check genesis block created
+            expect(blockchain.chain.length, 'Genesis block not created').to.equal(1); //check genesis block created
+            expect(blockchain.chain[0].hash, 'Genesis hash incorrect').to.equal('genesisHash'); //check genesis block hash
+            expect(blockchain.accounts.length, 'Pre-mine account not created').to.equal(1) //pre-mine account
+            expect(blockchain.networkNodes.length, 'networkNodes[] should be empty').to.equal(0) //check no pre-registered nodes
+            expect(blockchain.maxBlockSize, 'block size is different from .env setting').to.equal(parseInt(process.env.MAX_BLOCK_SIZE)) //pre-mine account balance
+            expect(blockchain.blockRewardAmount, 'block reward is different from .env setting').to.equal(parseFloat(process.env.BLOCK_REWARD)) //pre-mine account balance
         });
 
     });
+
+
 
 });

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha dev/test/**/*.mjs"
+    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs"
   },
   "author": "hammer",
   "license": "ISC",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "chai": "^5.1.1",
     "mocha": "^10.7.3",
+    "nock": "^13.5.5",
     "sinon": "^19.0.2",
     "supertest": "^7.0.0"
   }

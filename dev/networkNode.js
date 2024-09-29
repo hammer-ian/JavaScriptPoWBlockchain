@@ -111,10 +111,19 @@ app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) 
                 //add each new transaction request to array
                 requestTxnPromises.push(rp(requestOptions));
             });
+            logger.info(`Sending broadcast requests to: ${JSON.stringify(requestTxnPromises)}`);
 
             Promise.all(requestTxnPromises)
                 .then(data => {
+                    logger.info(`new transaction created and broadcast successfully`);
                     res.json({ note: "new transaction created and broadcast successfully" });
+                })
+                .catch(error => {
+                    logger.error(`Error in Promise.all: ${error}`);  // Log the error
+                    if (error.response) {
+                        logger.error(`Response error: ${error.response.headers.location}`);
+                    }
+                    res.status(500).json({ note: 'Transaction broadcast failed', error: error.message });
                 });
         } else {
             logger.info(`Transaction creation failed ${JSON.stringify(resultObj)}`);

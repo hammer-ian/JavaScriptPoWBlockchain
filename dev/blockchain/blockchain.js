@@ -11,6 +11,7 @@ const BlockChainIsValid = require('./blockchainIsValid');
 const SelectTransactionsForBlock = require('./selectTransactionsForBlock');
 const Account = require('./account');
 const { object } = require('joi');
+const { DataBrew } = require('aws-sdk');
 
 //Map the methods defined in refactored blockchain files to the Blockchain object prototype
 Object.assign(Blockchain.prototype, BlockChainExplorer);
@@ -64,12 +65,12 @@ Blockchain.prototype.createNewAccount = function (nickname, address) {
 
 Blockchain.prototype.getLatestNonce = function (debitAddress) {
 
-    logger.info('Retrieving account nonce');
+    logger.info(`Retrieving account nonce for debitAddress: ${debitAddress}`);
     //Get current debit account nonce
     const debitAddressAcc = this.accounts.find(account => account.address === debitAddress);
     // Make sure debit account exists
     if (!debitAddressAcc) {
-        throw new Error(`Account with address ${debitAddress} does not exist.`);
+        throw new Error(`Account with address ${debitAddress} does not exist`);
     }
 
     const debitAccNonce = debitAddressAcc.nonce;
