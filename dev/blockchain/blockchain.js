@@ -84,7 +84,7 @@ Blockchain.prototype.getLatestNonce = function (debitAddress) {
     this.pendingTransactions.forEach(txn => {
 
         if (txn.debitAddress === debitAddress) {
-            //if there are pending transactions we need to increment the largest nonce we find
+            //if there are pending transactions we need to find the largest nonce
             logger.info('Pending transactions detected from debit account');
             hasPendingTransactions = true;
             if (txn.nonce > pendingTxnNonce) pendingTxnNonce = txn.nonce;
@@ -95,16 +95,19 @@ Blockchain.prototype.getLatestNonce = function (debitAddress) {
     return hasPendingTransactions ? pendingTxnNonce + 1 : pendingTxnNonce;
 }
 
-Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddress, amount, gas, nonce) {
+Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddress, amount, gas) {
 
-    //only validate the debit address, debit funds, debit nonce
+    //get the latest account nonce, taking into account pending transactions
+    const nonce = this.getLatestNonce(debitAddress);
+
+    //validate the debit address, debit funds
     //credit address will be created/credited when transaction is included in new block
     const resultObj = this.validateTransaction(debitAddress, amount, gas);
 
     if (resultObj.ValidTxn) {
         //if no checks fail create txn object, adding in txn id
         const newTxnObj = {
-            txnID: uuidv4().split('-').join(''),
+            txnID: uuidv4(),
             debitAddress: debitAddress,
             creditAddress: creditAddress,
             amount: amount,
@@ -122,7 +125,7 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, nonce) {
 
     logger.info('Starting transaction validation');
     const resultObj = {
@@ -171,6 +174,23 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas) 
             Gas: gas,
             TotalDebit: amount + gas,
             DebitAccBalance: debitAddressAcc.balance
+        }
+        return resultObj;
+    }
+
+    /* 
+        validateTransaction is called both by createTransaction(), and processSelectedTransactions()
+        if called by createTransaction we do NOT need to validate nonce, this has been done already in createTransaction
+        if called by processSelectedTransactions we DO need to validate nonce
+        therefore, if a nonce is passed to validateTransaction we assume we've been called by processSelectedTransactions and validate nonce
+        else if no nonce is passed we will assume createTransaction called us, and not validate nonce
+    */
+    if (nonce && nonce !== debitAddressAcc.nonce) {
+        logger.info(`nonce check failed during Txn validation. Txn nonce ${nonce} does not equal account nonce ${debitAddressAcc.nonce}`);
+        resultObj.Error = `nonce check failed during Txn validation. Txn nonce does not equal account nonce`;
+        resultObj.Details = {
+            txnNonce: nonce,
+            debitAccNonce: debitAddressAcc.nonce
         }
         return resultObj;
     }
@@ -490,7 +510,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
     };
     //if no accountList is passed, default to updating the global account state
     if (!accountList) {
-        logger.info(`We are NOT in simulation mode, updating global account state`);
+        logger.info(`We are NOT in simulation mode, we are updating global account state`);
         accountList = this.accounts;
     }
 
@@ -498,7 +518,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
     let processedList = txnList.filter(txn => {
         //re-validate txn. note the debit check evaluates the txn in isolation
         //debit check does not take into account other pending txns in this block that may get processed first
-        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas);
+        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, txn.nonce);
         //if still valid execute change of state contained in transaction
         if (validationResult.ValidTxn) {
 
@@ -537,7 +557,6 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
                 creditAddressAcc = this.createNewAccount("", txn.creditAddress);
                 creditAddressAcc.credit(txn.amount);
             }
-
             return true;  // Transaction valid AND processed successfully
         } else {
             return false; // Transaction validation failed

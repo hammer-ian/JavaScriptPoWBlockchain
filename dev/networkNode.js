@@ -83,14 +83,11 @@ app.post('/transaction/broadcast', validateTransactionJSON, function (req, res) 
     logger.info('Received transaction to broadcast, creating new transaction object');
 
     try {
-        const nonce = blockchain.getLatestNonce(req.body.debitAddress);
-
         const resultObj = blockchain.createNewTransaction(
             req.body.debitAddress,
             req.body.creditAddress,
             req.body.amount,
             req.body.gas,
-            nonce
         );
 
         //if returning object has a transaction ID property, transaction created successfully

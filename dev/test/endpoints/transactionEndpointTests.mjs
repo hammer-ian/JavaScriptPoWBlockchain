@@ -2,6 +2,7 @@ import { expect } from 'chai';
 import request from 'supertest';
 import sinon from 'sinon';
 import nock from 'nock';
+import { v4 as uuidv4 } from 'uuid';
 
 // Import the default export of networkNode.js as an object
 import networkNode from '../../networkNode.js';
@@ -65,11 +66,15 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
         let blockchainStub;
         let nockScopes = []; // Array to hold all nock scopes
 
+        //create random addresses for test transactions, to avoid clashing with other unit tests
+        const debitAddress = uuidv4().split('-').join('');
+        const creditAddress = uuidv4().split('-').join('');
+
         beforeEach(() => {
             blockchainStub = sinon.stub(blockchain, 'createNewTransaction').returns({
                 txnID: 'testTxnID',
                 debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                creditAddress: 'xyz789',
+                creditAddress: creditAddress,
                 amount: 100,
                 gas: 10,
                 nonce: 0
@@ -97,7 +102,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 .post('/transaction/broadcast')
                 .send({
                     debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: 'xyz789',
+                    creditAddress: creditAddress,
                     amount: 100,
                     gas: 10
                 })
@@ -122,7 +127,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
-                    creditAddress: 'receiver123',
+                    creditAddress: creditAddress,
                     amount: 100,
                     gas: 10
                 })
@@ -135,18 +140,20 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
         });
 
         it('should return an error if debitAddress does not exist', function (done) {
+
+            blockchainStub.restore();
             request(app)
                 .post('/transaction/broadcast')
                 .send({
-                    debitAddress: 'sender123',
-                    creditAddress: 'receiver123',
+                    debitAddress: debitAddress,
+                    creditAddress: creditAddress,
                     amount: 100,
                     gas: 10
                 })
                 .expect(400)
                 .end(function (err, res) {
                     if (err) return done(err);
-                    expect(res.body).to.have.property('error').that.includes('Account with address sender123 does not exist');
+                    expect(res.body).to.have.property('error').that.includes(`Account with address ${debitAddress} does not exist`);
                     done();
                 });
         });
@@ -163,7 +170,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 .post('/transaction/broadcast')
                 .send({
                     debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: 'receiver123',
+                    creditAddress: creditAddress,
                     amount: 1001,
                     gas: 10
                 })
@@ -179,7 +186,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
-                    debitAddress: 'sender123',
+                    debitAddress: debitAddress, //creditAddress is missing
                     amount: 100,
                     gas: 10
                 })
@@ -195,8 +202,8 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
-                    debitAddress: 'sender123',
-                    creditAddress: 'receiver123',
+                    debitAddress: debitAddress,
+                    creditAddress: creditAddress,
                     amount: -100, // Invalid negative amount
                     gas: 10
                 })
@@ -212,8 +219,8 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
-                    debitAddress: 'sender123',
-                    creditAddress: 'receiver123',
+                    debitAddress: debitAddress,
+                    creditAddress: creditAddress,
                     amount: 100
                     // Missing gas
                 })

@@ -7,6 +7,7 @@ const logger = require('../utils/logger');
 class Account {
 
     //These variables represent the account state and must not be updated by methods outside of Account.js
+    //Balance and Nonce should only ever set when cloning an account (when simulating processing of a block)
     constructor(nickname, address, balance, nonce) {
         this.nickname = nickname || ''; //default 
         this.balance = balance || 0; //initial amount for testing
