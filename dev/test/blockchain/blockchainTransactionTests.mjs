@@ -127,7 +127,75 @@ describe('Blockchain Create Transaction Business Logic', function () {
 
     describe('Validate transaction', () => {
 
-        it('should validate a transaction object', () => {
+        const gas = 10;
+        const amount = 100;
+        const nonce = 0;
+        const systemDebitAddress = 'system'
+
+        //start with happy path as if called from createTransaction (no nonce)
+        it('should return true if there are no validation errors when called WITHOUT a nonce', () => {
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas);
+            expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
+            expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
+        });
+
+        //start with happy path as if called from processSelectedTransactions (nonce)
+        it('should return true if there are no validation errors when called WITH a nonce', () => {
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonce);
+            expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
+            expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
+        });
+
+        //check block reward is correct
+        it('should return true for block rewards if system debit address and amount is correct', () => {
+            const resultObj = blockchain.validateTransaction(systemDebitAddress, blockchain.blockRewardAmount);
+            expect(resultObj.ValidTxn, 'valid block reward but returned !true').to.equal(true);
+            expect(resultObj.Error, 'valid block reward but Error returned !null').to.equal(null);
+        });
+
+        //fail if block reward is incorrect
+        it('should fail if block reward and amount is INCORRECT', () => {
+            const resultObj = blockchain.validateTransaction(systemDebitAddress, blockchain.blockRewardAmount - 10);
+            expect(resultObj.ValidTxn, 'incorrect block reward but returned !false').to.equal(false);
+            expect(resultObj.Error, 'incorrect block reward but Error incorrect').to.include('block reward is not correct');
+            expect(resultObj.Details, 'error details returned incorrect: TxnBlockReward').to.have.property('TxnBlockReward').that.equals(blockchain.blockRewardAmount - 10);
+            expect(resultObj.Details, 'error details returned incorrect: CorrectBlockReward').to.have.property('CorrectBlockReward').that.equals(blockchain.blockRewardAmount);
+        });
+
+        //fail if debit account address does not exist
+        it('should fail if debit account address does not exist', () => {
+            const resultObj = blockchain.validateTransaction(debitAddress, amount, gas);
+            expect(resultObj.ValidTxn, 'debit address does not exist but returned !false').to.equal(false);
+            expect(resultObj.Error, 'debit address does not exist but Error incorrect').to.include('address check failed');
+            expect(resultObj.Details, 'error details returned incorrect: DebitAddress').to.have.property('DebitAddress').that.equals(false);
+        });
+
+        //fail if debit account address does not have sufficient funds
+        it('should fail if debit account has insufficient funds', () => {
+            //make sure amount is greater than account balance
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount + 1000, gas);
+            //get account object using address so we can access account balance
+            const genesisAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
+
+            expect(resultObj.ValidTxn, 'insufficient funds but returned !false').to.equal(false);
+            expect(resultObj.Error, 'insufficient funds but Error incorrect').to.include('debitCheck failed: insufficient funds');
+            expect(resultObj.Details, 'error details returned incorrect: DebitAmount').to.have.property('DebitAmount').that.equals(amount + 1000);
+            expect(resultObj.Details, 'error details returned incorrect: Gas').to.have.property('Gas').that.equals(gas);
+            expect(resultObj.Details, 'error details returned incorrect: TotalDebit').to.have.property('TotalDebit').that.equals(amount + 1000 + gas);
+            expect(resultObj.Details, 'error details returned incorrect: DebitAccBalance').to.have.property('DebitAccBalance').that.equals(genesisAddressAcc.balance);
+        });
+
+        //should fail if called from processSelectedTransactions and nonce is wrong
+        it('should fail if nonce is wrong', () => {
+            const nonce = 5; //wrong
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonce);
+            //get account object using address so we can access account nonce
+            const genesisAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
+
+            expect(resultObj.ValidTxn, 'nonce incorrect but returned !false').to.equal(false);
+            expect(resultObj.Error, 'nonce incorrect but Error incorrect').to.include('nonce check failed during Txn validation');
+            expect(resultObj.Details, 'error details returned incorrect: txnNonce').to.have.property('txnNonce').that.equals(nonce);
+            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('debitAccNonce').that.equals(genesisAddressAcc.nonce);
 
         });
     });

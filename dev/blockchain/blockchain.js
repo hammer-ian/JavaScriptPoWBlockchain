@@ -425,7 +425,7 @@ Blockchain.prototype.createBlockReward = function (nodeAccAddress) {
 
     logger.info(`Creating miners block reward for ${nodeAccAddress}`);
     const newBlockReward = {
-        txnID: uuidv4().split('-').join(''),
+        txnID: uuidv4(),
         debitAddress: 'system',
         creditAddress: nodeAccAddress,
         amount: this.blockRewardAmount

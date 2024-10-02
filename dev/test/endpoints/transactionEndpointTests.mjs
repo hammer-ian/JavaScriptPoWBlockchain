@@ -37,7 +37,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
     */
 
     describe('GET /blockchain', function () {
-        it('should return JSON representing the blockchain instance', function (done) {
+        it('app should return JSON representing the blockchain instance', function (done) {
             request(app)
                 .get('/blockchain')
                 .expect(200)
@@ -54,7 +54,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
     });
 
     describe('GET /healthcheck', function () {
-        it('should return a 200 OK response', function (done) {
+        it('app should return a 200 OK response', function (done) {
             request(app)
                 .get('/healthcheck')
                 .expect(200)
@@ -97,7 +97,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
             nockScopes = []; // Clear nock scopes
         });
 
-        it('should broadcast a transaction to the network', function (done) {
+        it('app should broadcast a transaction to the network', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -123,7 +123,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if debitAddress is missing', function (done) {
+        it('app should return an error if debitAddress is missing', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -139,7 +139,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if debitAddress does not exist', function (done) {
+        it('app should return an error if debitAddress does not exist', function (done) {
 
             blockchainStub.restore();
             request(app)
@@ -158,7 +158,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if debitAddress does not have sufficient funds', function (done) {
+        it('app should return an error if debitAddress does not have sufficient funds', function (done) {
 
             /* Override the default stub for this specific test. restore() effectively removes 
              the createNewTransaction stub set in beforeEach() so the stubbed method returns to it's 
@@ -182,7 +182,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if creditAddress is missing', function (done) {
+        it('app should return an error if creditAddress is missing', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -198,7 +198,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if amount negative', function (done) {
+        it('app should return an error if amount negative', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -215,7 +215,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
                 });
         });
 
-        it('should return an error if gas is missing', function (done) {
+        it('app should return an error if gas is missing', function (done) {
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -234,7 +234,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
     });
 
     describe('POST /internal/receive-new-transaction', function () {
-        it('should return a 200 OK response', function (done) {
+        it('app should return a 200 OK response', function (done) {
             request(app)
                 .get('/healthcheck')
                 .expect(200)
