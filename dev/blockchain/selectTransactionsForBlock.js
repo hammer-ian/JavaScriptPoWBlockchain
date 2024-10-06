@@ -54,52 +54,51 @@ function selectTransactionsForBlock() {
     }
     logger.info(`Transactions selected for block: ${JSON.stringify(blockTransactions)}`);
     return blockTransactions;
+}
 
-    function groupByAccount(pendingTransactions) {
-        // Create an object to hold the grouped transactions
-        let transactionsByAccount = {};
+function groupByAccount(pendingTransactions) {
+    // Create an object to hold the grouped transactions
+    let transactionsByAccount = {};
 
-        // Iterate through all pending transactions
-        for (let tx of pendingTransactions) {
-            // Get the account debit address from the transaction
-            let debitAddress = tx.debitAddress;
+    // Iterate through all pending transactions
+    for (let tx of pendingTransactions) {
+        // Get the account debit address from the transaction
+        let debitAddress = tx.debitAddress;
 
-            // If this is the first time we've seen this account, create an empty array for it
-            if (!transactionsByAccount[debitAddress]) {
-                transactionsByAccount[debitAddress] = [];
-            }
-            // Push the transaction into the array for this account
-            transactionsByAccount[debitAddress].push(tx);
+        // If this is the first time we've seen this account, create an empty array for it
+        if (!transactionsByAccount[debitAddress]) {
+            transactionsByAccount[debitAddress] = [];
         }
-        return transactionsByAccount;
+        // Push the transaction into the array for this account
+        transactionsByAccount[debitAddress].push(tx);
     }
-    function filterSingleTransactionAccounts(transactionsByAccount) {
-        let singleTxAccounts = [];
+    return transactionsByAccount;
+}
+function filterSingleTransactionAccounts(transactionsByAccount) {
+    let singleTxAccounts = [];
 
-        // Iterate over each debit address in the transactionsByAccount object
-        for (let debitAddress in transactionsByAccount) {
-            // Check if this account has exactly one pending transaction
-            if (transactionsByAccount[debitAddress].length === 1) {
-                // Push the single transaction into the result array
-                singleTxAccounts.push(transactionsByAccount[debitAddress][0]);
-            }
+    // Iterate over each debit address in the transactionsByAccount object
+    for (let debitAddress in transactionsByAccount) {
+        // Check if this account has exactly one pending transaction
+        if (transactionsByAccount[debitAddress].length === 1) {
+            // Push the single transaction into the result array
+            singleTxAccounts.push(transactionsByAccount[debitAddress][0]);
         }
-        return singleTxAccounts;
     }
-    function filterMultiTransactionAccounts(transactionsByAccount) {
-        let multiTxAccounts = {};
+    return singleTxAccounts;
+}
+function filterMultiTransactionAccounts(transactionsByAccount) {
+    let multiTxAccounts = {};
 
-        // Iterate over each account in the transactionsByAccount object
-        for (let account in transactionsByAccount) {
-            // Check if this account has more than one pending transaction
-            if (transactionsByAccount[account].length > 1) {
-                // Add the account and its transactions to the result object
-                multiTxAccounts[account] = transactionsByAccount[account];
-            }
+    // Iterate over each account in the transactionsByAccount object
+    for (let account in transactionsByAccount) {
+        // Check if this account has more than one pending transaction
+        if (transactionsByAccount[account].length > 1) {
+            // Add the account and its transactions to the result object
+            multiTxAccounts[account] = transactionsByAccount[account];
         }
-        return multiTxAccounts;
     }
-
+    return multiTxAccounts;
 }
 
 module.exports = {

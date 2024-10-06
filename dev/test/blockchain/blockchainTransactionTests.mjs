@@ -11,7 +11,7 @@ import Blockchain from '../../blockchain/blockchain.js';
  * Blockchain consensus, explorer, mining will be seperated into other test modules
  */
 
-describe('Blockchain Create Transaction Business Logic', function () {
+describe('Blockchain Create Transaction Logic', function () {
 
     //create a new instance of blockchain
     let blockchain, debitAddress, creditAddress;
@@ -73,7 +73,7 @@ describe('Blockchain Create Transaction Business Logic', function () {
     });
 
     describe('Create new transaction', () => {
-        let getLatestNonceStub, validateTxnStub;
+        let getLatestNonceStub, validateTxnStub, txnObj;
         beforeEach(() => {
             // Stub call to get nonce
             getLatestNonceStub = sinon.stub(blockchain, 'getLatestNonce').returns(1);
@@ -95,7 +95,7 @@ describe('Blockchain Create Transaction Business Logic', function () {
 
             const pendingTxns = blockchain.pendingTransactions.length;
             //check txn object returned has valid properties
-            const txnObj = blockchain.createNewTransaction(
+            txnObj = blockchain.createNewTransaction(
                 debitAddress,
                 creditAddress,
                 100, //txn amount
@@ -108,6 +108,13 @@ describe('Blockchain Create Transaction Business Logic', function () {
             expect(txnObj.gas, 'gas is incorrect').to.equal(10);
             expect(txnObj.nonce, 'nonce is incorrect').to.equal(1);
             expect(blockchain.pendingTransactions.length, 'issue adding txn to pending transaction pool').to.equal(pendingTxns + 1);
+        });
+
+        it('should return a txn identical to the txn added to the pending pool', () => {
+            //make sure txn added to the pending pool is the same as the txn returned to us
+            //this is also an implicit test of addNewTransactionToPendingPool(), so we won't it again test elsewhere
+            const pendingTxnObj = blockchain.pendingTransactions.find(txn => txn.txnID === txnObj.txnID);
+            expect(JSON.stringify(txnObj), 'returned txnObj !== txn added to pending pool').to.equal(JSON.stringify(pendingTxnObj));
         });
 
         it('should gracefully return validation errors and NOT add txn to pending pool', () => {
@@ -123,6 +130,7 @@ describe('Blockchain Create Transaction Business Logic', function () {
             expect(resultObj.ValidTxn, 'txn should not be flagged as valid').to.equal(false);
             expect(blockchain.pendingTransactions.length, 'txn should not be added to pending transaction pool').to.equal(pendingTxns);
         });
+
     });
 
     describe('Validate transaction', () => {
@@ -130,18 +138,32 @@ describe('Blockchain Create Transaction Business Logic', function () {
         const gas = 10;
         const amount = 100;
         const nonce = 0;
-        const systemDebitAddress = 'system'
+        const systemDebitAddress = 'system';
+        let debitAddressAcc;
+        beforeEach(() => {
+            debitAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
+        });
+
 
         //start with happy path as if called from createTransaction (no nonce)
         it('should return true if there are no validation errors when called WITHOUT a nonce', () => {
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas);
+            const validationParams = {
+                type: 'createNewTransaction'
+            }
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
             expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
             expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
         });
 
-        //start with happy path as if called from processSelectedTransactions (nonce)
+        //start with happy path as if called from processSelectedTransactions (with nonce)
         it('should return true if there are no validation errors when called WITH a nonce', () => {
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonce);
+            //check debitAcc address exist
+            const validationParams = {
+                type: 'processSelectedTransactions',
+                nonce: nonce,
+                account: debitAddressAcc
+            }
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
             expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
             expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
         });
@@ -174,30 +196,32 @@ describe('Blockchain Create Transaction Business Logic', function () {
         it('should fail if debit account has insufficient funds', () => {
             //make sure amount is greater than account balance
             const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount + 1000, gas);
-            //get account object using address so we can access account balance
-            const genesisAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
 
             expect(resultObj.ValidTxn, 'insufficient funds but returned !false').to.equal(false);
             expect(resultObj.Error, 'insufficient funds but Error incorrect').to.include('debitCheck failed: insufficient funds');
             expect(resultObj.Details, 'error details returned incorrect: DebitAmount').to.have.property('DebitAmount').that.equals(amount + 1000);
             expect(resultObj.Details, 'error details returned incorrect: Gas').to.have.property('Gas').that.equals(gas);
             expect(resultObj.Details, 'error details returned incorrect: TotalDebit').to.have.property('TotalDebit').that.equals(amount + 1000 + gas);
-            expect(resultObj.Details, 'error details returned incorrect: DebitAccBalance').to.have.property('DebitAccBalance').that.equals(genesisAddressAcc.balance);
+            expect(resultObj.Details, 'error details returned incorrect: DebitAccBalance').to.have.property('DebitAccBalance').that.equals(debitAddressAcc.balance);
         });
 
         //should fail if called from processSelectedTransactions and nonce is wrong
-        it('should fail if nonce is wrong', () => {
-            const nonce = 5; //wrong
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonce);
-            //get account object using address so we can access account nonce
-            const genesisAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
+        it('should fail if nonce is wrong when called from processSelectedTransactions', () => {
+            const validationParams = {
+                type: 'processSelectedTransactions',
+                nonce: 5, //wrong nonce
+                account: debitAddressAcc
+            }
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
 
-            expect(resultObj.ValidTxn, 'nonce incorrect but returned !false').to.equal(false);
-            expect(resultObj.Error, 'nonce incorrect but Error incorrect').to.include('nonce check failed during Txn validation');
-            expect(resultObj.Details, 'error details returned incorrect: txnNonce').to.have.property('txnNonce').that.equals(nonce);
-            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('debitAccNonce').that.equals(genesisAddressAcc.nonce);
+            expect(resultObj.ValidTxn, 'nonce incorrect but returned still returned !false').to.equal(false);
+            expect(resultObj.Error, 'nonce failure error incorrect').to.include('nonce check failed processing txn');
+            expect(resultObj.Details, 'error details returned incorrect: txnNonce').to.have.property('txnNonce').that.equals(5);
+            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('debitAccNonce').that.equals(debitAddressAcc.nonce);
+        });
+
+        it('should fail if nonce is wrong when called from /internal/receive-new-transaction', () => {
 
         });
     });
-
 });

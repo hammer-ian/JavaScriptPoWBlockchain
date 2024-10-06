@@ -54,10 +54,12 @@ function Blockchain(networkNodeURL) {
 
 Blockchain.prototype.createNewAccount = function (nickname, address) {
 
+    logger.info(`Creating new account: '${nickname}', address: '${address}'`)
     const existingAddress = this.accounts.find(account => account.address === address)
     if (!existingAddress) {
         const newAccount = new Account(nickname, address);
         this.accounts.push(newAccount);
+        logger.info(`New account created: '${JSON.stringify(newAccount)}'`);
         return newAccount;
     }
     return null;
@@ -102,7 +104,10 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
 
     //validate the debit address, debit funds
     //credit address will be created/credited when transaction is included in new block
-    const resultObj = this.validateTransaction(debitAddress, amount, gas);
+    const validationParams = {
+        type: 'createNewTransaction'
+    }
+    const resultObj = this.validateTransaction(debitAddress, amount, gas, validationParams);
 
     if (resultObj.ValidTxn) {
         //if no checks fail create txn object, adding in txn id
@@ -125,7 +130,7 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, nonce) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, typeOfValidation) {
 
     logger.info('Starting transaction validation');
     const resultObj = {
@@ -177,22 +182,49 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
         }
         return resultObj;
     }
-
     /* 
-        validateTransaction is called both by createTransaction(), and processSelectedTransactions()
+        validateTransaction is called from
+         - createTransaction() - 3 params passed
+         - processSelectedTransactions() - 4 params passed
+         - /internal/receive-new-transaction - 4 params passed
         if called by createTransaction we do NOT need to validate nonce, this has been done already in createTransaction
-        if called by processSelectedTransactions we DO need to validate nonce
-        therefore, if a nonce is passed to validateTransaction we assume we've been called by processSelectedTransactions and validate nonce
-        else if no nonce is passed we will assume createTransaction called us, and not validate nonce
+        if called by processSelectedTransactions we DO need to validate nonce (vs. account nonce)
+        if called by /internal/receive-new-transaction we DO need to validate nonce (vs. latest pending pool)
     */
-    if (nonce && nonce !== debitAddressAcc.nonce) {
-        logger.info(`nonce check failed during Txn validation. Txn nonce ${nonce} does not equal account nonce ${debitAddressAcc.nonce}`);
-        resultObj.Error = `nonce check failed during Txn validation. Txn nonce does not equal account nonce`;
-        resultObj.Details = {
-            txnNonce: nonce,
-            debitAccNonce: debitAddressAcc.nonce
+
+    //Called from /internal/receive-new-transaction, validate nonce vs. pending pool
+    if (typeOfValidation.type === 'receive-new-transaction') {
+        const txnNonce = typeOfValidation.nonce;
+        const latestNonce = this.getLatestNonce(debitAddress);
+        if (txnNonce !== latestNonce) {
+            logger.info(`nonce check failed validating txn received from network. Txn nonce: ${txnNonce} out of sequence with pending pool nonce: ${latestNonce}`);
+            resultObj.Error = `nonce check failed validating txn received from network. Txn nonce: ${txnNonce} out of sequence with pending pool nonce: ${latestNonce}`;
+            resultObj.Details = {
+                note: 'txn nonce should be one higher than pending pool',
+                txnNonce: txnNonce,
+                pendingPoolNonce: latestNonce
+            }
+            return resultObj;
         }
-        return resultObj;
+    }
+    //Called from processSelectedTransactions, so validate nonce vs. account.nonce. 
+    //Make sure we check the account nonce using the account instance used the accountList passed from processSelectedTransactions, in case we are in simulation mode
+    if (typeOfValidation.type === 'processSelectedTransactions') {
+
+        const txnNonce = typeOfValidation.nonce;
+        //make sure we check against account instance passed
+        const debitAddressAcc = typeOfValidation.account;
+
+        if (txnNonce !== debitAddressAcc.nonce) {
+            logger.info(`nonce check failed processing txn. Txn nonce ${txnNonce} does not equal account nonce ${debitAddressAcc.nonce}`);
+            resultObj.Error = `nonce check failed processing txn. Txn nonce ${txnNonce} does not equal account nonce ${debitAddressAcc.nonce}`;
+            resultObj.Details = {
+                note: 'txn nonce should equal account nonce',
+                txnNonce: txnNonce,
+                debitAccNonce: debitAddressAcc.nonce
+            }
+            return resultObj;
+        }
     }
 
     resultObj.ValidTxn = true;
@@ -242,8 +274,9 @@ Blockchain.prototype.mine = function (minerAccAddr) {
     const processedListObj = this.processSelectedTransactions(txnList, minerAccAddr);
     const processedList = processedListObj.processedList;
 
-    //If sufficient valid transactions remain create new block (2 = block reward + 1)
+    //If sufficient valid transactions remain create new block (2 = 1 block reward + 1 end user txn)
     if (processedList.length >= 2) {
+
         const merkleRoot = this.getMerkleRoot(processedList);
         const stateRoot = this.getStateRoot(this.accounts);
         const nonce = this.proofOfWork(prevBlockHash, processedList);
@@ -281,7 +314,7 @@ Blockchain.prototype.getMerkleRoot = function (txnList) {
 
 Blockchain.prototype.getStateRoot = function (accountList) {
 
-    logger.info('Creating new state root of blockchain account state');
+    logger.info(`Creating new state root of blockchain account state ${JSON.stringify(accountList)}`);
     // Hash the state of each account
     const accountHashes = accountList.map(account =>
         hashAccountState(account.address, account.balance, account.nonce)
@@ -331,10 +364,10 @@ Blockchain.prototype.checkStateRoot = function (txnList, minerAddr) {
         }
     });
 
-    logger.info('Simulating processing new blocks txns');
+    logger.info(`Simulating processing new blocks txns. Txnlist: ${JSON.stringify(txnList)}, Accounts: ${JSON.stringify(tempAccounts)}`);
     const processingResult = this.processSelectedTransactions(txnList, minerAddr, tempAccounts);
     if (processingResult.processedList.length >= 2) {
-        logger.info('Simulation success, creating state root for simulation');
+        logger.info(`Simulation success, creating state root for simulation ${JSON.stringify(processingResult)} Accounts: ${JSON.stringify(tempAccounts)}`);
         stateRoot = this.getStateRoot(tempAccounts);
         logger.info('Returning simulated state root to new block validation');
         return stateRoot;
@@ -500,55 +533,68 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
 //Re-validate and process transactions in new block
 //While we could find the miner address from the block reward in txnList, we would have to search for the block reward txn
 //And given we have the miner addr handy from creating the block it's easier to also pass the address here
-Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr, accountList) {
+Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr, accountListClone) {
 
+    logger.info(`Received transactions selected for block, processing: ${JSON.stringify(txnList)}`);
     logger.info('Starting re-validation of selected transactions before processing block');
 
     const processingResult = {
         processedList: null,
         errorList: null
     };
-    //if no accountList is passed, default to updating the global account state
-    if (!accountList) {
+
+    //filter txn list containing just end user txns, i.e. no block reward
+    const endUserTxnList = txnList.filter(txn => txn.debitAddress !== 'system');
+    logger.info(`End user txns are: ${JSON.stringify(endUserTxnList)}`);
+
+    //if a cloned accountList is passed, we are in SIMULATION mode only, and update state for a cloned list of accounts
+    //if accountList is NOT passed, we are NOT in simulation mode and will update the global account state
+    let accountList;
+    if (!accountListClone) {
         logger.info(`We are NOT in simulation mode, we are updating global account state`);
         accountList = this.accounts;
+    } else {
+        logger.info(`We are in SIMULATION mode, no changes to global account state`);
+        accountList = accountListClone;
     }
 
-    // Re-validate transactions selected from pending pool
-    let processedList = txnList.filter(txn => {
-        //re-validate txn. note the debit check evaluates the txn in isolation
-        //debit check does not take into account other pending txns in this block that may get processed first
-        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, txn.nonce);
-        //if still valid execute change of state contained in transaction
+    const validationParams = {
+        type: 'processSelectedTransactions',
+        nonce: '',
+        account: ''
+    }
+
+    // Re-validate end user transactions selected from pending pool
+    let processedList = endUserTxnList.filter(txn => {
+
+        //re-validate end user txns
+        logger.info(`Re-validating txn: ${JSON.stringify(txn)}`);
+
+        const debitAddressAcc = accountList.find(account => account.address === txn.debitAddress);
+        let creditAddressAcc = accountList.find(account => account.address === txn.creditAddress);
+
+        validationParams.nonce = txn.nonce;
+        validationParams.account = debitAddressAcc;
+        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, validationParams);
+        logger.info(`Re-validation result: Txn ${txn.txnID}, validation result: ${validationResult.ValidTxn}`);
+
+        //if txn still valid execute change of state contained in transaction
         if (validationResult.ValidTxn) {
 
-            const debitAddressAcc = accountList.find(account => account.address === txn.debitAddress);
-            let creditAddressAcc = accountList.find(account => account.address === txn.creditAddress);
-            let minerAddrAcc = accountList.find(account => account.address === minerAddr);
-
-            if (txn.debitAddress !== 'system') {
-                //check transaction is being processed in the correct sequence as per debit account nonce
-                if (txn.nonce !== debitAddressAcc.nonce) {
-                    logger.error(`Issue with sequencing. Txn nonce ${txn.nonce} !== ${debitAddressAcc.nonce}`);
-                    return false;
-                }
-
-                if (!debitAddressAcc.debit(txn.amount + txn.gas)) {
-                    //debit failed remove transaction from list of valid transactions
-                    logger.error(`Debit check failed for: ${debitAddressAcc.address}. Balance exhausted by other transactions in block.`);
-                    return false;
-                }
-
-                // debit successful, increment nonce and credit miner with txn gas fee
-                debitAddressAcc.incrementTransactionCount();
-
-                if (minerAddrAcc) {
-                    minerAddrAcc.credit(txn.gas);
-                } else {
-                    minerAddrAcc = this.createNewAccount("", minerAddr);
-                    minerAddrAcc.credit(txn.gas);
-                }
+            //check transaction is being processed in the correct sequence as per debit account nonce
+            if (txn.nonce !== debitAddressAcc.nonce) {
+                logger.error(`Issue with sequencing. Txn nonce: ${txn.nonce} !== Acc nonce: ${debitAddressAcc.nonce}`);
+                txn.failureReason = `Issue with sequencing. Txn nonce: ${txn.nonce} !== Acc nonce: ${debitAddressAcc.nonce}`;
+                return false;
             }
+
+            if (!debitAddressAcc.debit(txn.amount + txn.gas)) {
+                //debit failed remove transaction from list of valid transactions
+                logger.error(`Debit check failed for: ${debitAddressAcc.address}. Balance exhausted by other transactions in block.`);
+                txn.failureReason = 'Debit check failed';
+                return false;
+            }
+
             //now credit beneficiary, first checking to make sure account exists
             if (creditAddressAcc) {
                 creditAddressAcc.credit(txn.amount);
@@ -557,21 +603,55 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
                 creditAddressAcc = this.createNewAccount("", txn.creditAddress);
                 creditAddressAcc.credit(txn.amount);
             }
+            // debit / credit complete, increment nonce and credit miner with txn gas fee
+            debitAddressAcc.incrementTransactionCount();
+
             return true;  // Transaction valid AND processed successfully
+
         } else {
+            txn.failureReason = 'Re-validation failed';
             return false; // Transaction validation failed
         }
+
     });
     //if the # of txns selected for block !==  # of txns successfully processed
-    if (txnList.length !== processedList.length) {
+    if (endUserTxnList.length !== processedList.length) {
         //filter() iterates through array evaluating elements, where condition is true element is added to a new array
         //some() method returns true if txnID is found, but we want to keep missing txns (false not found) so we flip the boolean with !processedList
         //that means some() passes true to filter() when txn not found
-        const errorList = txnList.filter(selectedTxn => !processedList.some(txn => txn.txnID === selectedTxn.txnID));
+        const errorList = endUserTxnList.filter(selectedTxn => !processedList.some(txn => txn.txnID === selectedTxn.txnID));
         logger.error(`Following txns were not processed successfully: ${JSON.stringify(errorList)}`);
 
         processingResult.errorList = errorList;
     }
+
+    //Now process miner's block reward if sufficient (1) end user txns were successfully processed
+    if (processedList.length >= 1) {
+        logger.info('Starting to process block reward and credit txn gas to miner');
+
+        //First credit gas from processed end user transactions
+        let minerAddrAcc = accountList.find(account => account.address === minerAddr);
+        processedList.forEach(txn => {
+
+            if (minerAddrAcc) {
+                logger.info(`Miner account found`);
+                minerAddrAcc.credit(txn.gas);
+            } else {
+                logger.info(`Miner account not found, creating it`);
+                minerAddrAcc = this.createNewAccount("", minerAddr);
+                minerAddrAcc.credit(txn.gas);
+            }
+            logger.info(`Credited gas: ${txn.gas} to miner: ${minerAddr}`);
+        });
+
+        //Second credit blockreward txn amount
+        let blockRewardTxn = txnList.find(txn => txn.debitAddress === 'system');
+        logger.info(`Blockreward: ${JSON.stringify(blockRewardTxn)}`);
+        minerAddrAcc.credit(blockRewardTxn.amount);
+        logger.info(`Credited blockreward: ${blockRewardTxn.amount} to miner: ${minerAddr}`);
+        processedList.push(blockRewardTxn);
+    }
+
     processingResult.processedList = processedList;
     return processingResult;
 }

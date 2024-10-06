@@ -6,6 +6,10 @@
   "scripts": {
     "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs"
   },
+  "comments": {
+    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",
+    "test2": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/mineBlockTests.mjs"
+  },
   "author": "hammer",
   "license": "ISC",
   "dependencies": {

@@ -52,6 +52,8 @@ app.use((req, res, next) => {
 const networkNodeDetails = getNetworkNodeDetails();
 const blockchain = new Blockchain(networkNodeDetails.networkNodeURL);
 const nodeId = `node-${uuidv4().split('-').join('')}`; //generate unique node id
+let nodeAccCreated = false;
+let nodeAccAddress, nodeAcc;
 
 /**********************************
   
@@ -147,16 +149,18 @@ app.post('/internal/receive-new-transaction', function (req, res) {
     const newTxnObj = req.body;
     const resultObj = blockchain.validateTransaction(
         newTxnObj.debitAddress,
-        newTxnObj.creditAddress,
         newTxnObj.amount,
         newTxnObj.gas,
-        newTxnObj.nonce
+        {
+            type: 'receive-new-transaction',
+            nonce: newTxnObj.nonce
+        }
     );
     if (resultObj.ValidTxn) {
         blockchain.addNewTransactionToPendingPool(newTxnObj);
         res.json({ note: `transaction added to pending pool, respondingNode: ${blockchain.currentNodeUrl}` });
     } else {
-        res.status(400).json({ note: `transaction validation failed, txn not added to pending pool: ${resultObj}` });
+        res.status(400).json({ note: `transaction validation failed, txn not added to pending pool: ${JSON.stringify(resultObj)}` });
     }
 });
 
@@ -165,12 +169,15 @@ app.get('/mine', async function (req, res) {
     try {
         logger.info('Request received to mine..');
         //retrieve default node address
-        const nodeAccAddress = getNodeCreditAddress();
-        let nodeAcc = blockchain.accounts.find(account => account.address === nodeAccAddress);
-        //if account has not been created
-        if (!nodeAcc) {
-            //create Account for node using default address
-            nodeAcc = blockchain.createNewAccount(nodeId, nodeAccAddress);
+        if (!nodeAccCreated) {
+            nodeAccAddress = getNodeCreditAddress();
+            nodeAcc = blockchain.accounts.find(account => account.address === nodeAccAddress);
+            //if account has not been created, or we can't find the default address
+            if (!nodeAcc) {
+                //create Account for node
+                nodeAcc = blockchain.createNewAccount(nodeId, nodeAccAddress);
+            }
+            nodeAccCreated = true;
         }
         //Start mining
         const result = blockchain.mine(nodeAcc.address);
