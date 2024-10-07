@@ -202,7 +202,8 @@ describe('Blockchain Create Transaction Logic', function () {
             expect(resultObj.Details, 'error details returned incorrect: DebitAmount').to.have.property('DebitAmount').that.equals(amount + 1000);
             expect(resultObj.Details, 'error details returned incorrect: Gas').to.have.property('Gas').that.equals(gas);
             expect(resultObj.Details, 'error details returned incorrect: TotalDebit').to.have.property('TotalDebit').that.equals(amount + 1000 + gas);
-            expect(resultObj.Details, 'error details returned incorrect: DebitAccBalance').to.have.property('DebitAccBalance').that.equals(debitAddressAcc.balance);
+            expect(resultObj.Details, 'error details returned incorrect: DebitAccBalance').to.have.property('DebitAccBalance')
+                .that.equals(debitAddressAcc.balance);
         });
 
         //should fail if called from processSelectedTransactions and nonce is wrong
@@ -217,11 +218,22 @@ describe('Blockchain Create Transaction Logic', function () {
             expect(resultObj.ValidTxn, 'nonce incorrect but returned still returned !false').to.equal(false);
             expect(resultObj.Error, 'nonce failure error incorrect').to.include('nonce check failed processing txn');
             expect(resultObj.Details, 'error details returned incorrect: txnNonce').to.have.property('txnNonce').that.equals(5);
-            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('debitAccNonce').that.equals(debitAddressAcc.nonce);
+            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('debitAccNonce')
+                .that.equals(debitAddressAcc.nonce);
         });
 
         it('should fail if nonce is wrong when called from /internal/receive-new-transaction', () => {
+            const validationParams = {
+                type: 'receive-new-transaction',
+                nonce: 5 //wrong nonce
+            }
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
 
+            expect(resultObj.ValidTxn, 'nonce incorrect but returned still returned !false').to.equal(false);
+            expect(resultObj.Error, 'nonce failure error incorrect').to.include('nonce check failed validating txn received from network');
+            expect(resultObj.Details, 'error details returned incorrect: txnNonce').to.have.property('txnNonce').that.equals(5);
+            expect(resultObj.Details, 'error details returned incorrect: debitAccNonce').to.have.property('pendingPoolNonce')
+                .that.equals(blockchain.getLatestNonce(process.env.GENESIS_PRE_MINE_ACC));
         });
     });
 });

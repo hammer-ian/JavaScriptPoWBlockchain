@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs"
+    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",
+    "docker": "docker-compose up -d"
   },
   "comments": {
     "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",

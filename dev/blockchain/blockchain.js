@@ -130,7 +130,7 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, typeOfValidation) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, validationParams) {
 
     logger.info('Starting transaction validation');
     const resultObj = {
@@ -193,8 +193,8 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
     */
 
     //Called from /internal/receive-new-transaction, validate nonce vs. pending pool
-    if (typeOfValidation.type === 'receive-new-transaction') {
-        const txnNonce = typeOfValidation.nonce;
+    if (validationParams.type === 'receive-new-transaction') {
+        const txnNonce = validationParams.nonce;
         const latestNonce = this.getLatestNonce(debitAddress);
         if (txnNonce !== latestNonce) {
             logger.info(`nonce check failed validating txn received from network. Txn nonce: ${txnNonce} out of sequence with pending pool nonce: ${latestNonce}`);
@@ -209,11 +209,11 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
     }
     //Called from processSelectedTransactions, so validate nonce vs. account.nonce. 
     //Make sure we check the account nonce using the account instance used the accountList passed from processSelectedTransactions, in case we are in simulation mode
-    if (typeOfValidation.type === 'processSelectedTransactions') {
+    if (validationParams.type === 'processSelectedTransactions') {
 
-        const txnNonce = typeOfValidation.nonce;
+        const txnNonce = validationParams.nonce;
         //make sure we check against account instance passed
-        const debitAddressAcc = typeOfValidation.account;
+        const debitAddressAcc = validationParams.account;
 
         if (txnNonce !== debitAddressAcc.nonce) {
             logger.info(`nonce check failed processing txn. Txn nonce ${txnNonce} does not equal account nonce ${debitAddressAcc.nonce}`);
@@ -338,45 +338,6 @@ Blockchain.prototype.getStateRoot = function (accountList) {
     }
 }
 
-Blockchain.prototype.checkStateRoot = function (txnList, minerAddr) {
-
-    logger.info('Checking state root for received block');
-    let stateRoot = null;
-    //when processing an incoming new block (mined by another node) to validate the new blocks state root we only want to to SIMULATE updating the account state
-    //no updates should be made to the real this.accounts[] state, in case we need to reject the new block
-    //so we clone the account state, and update the cloned accounts
-    logger.info('Cloning blockchain accounts to simulate processing new blocks txns');
-    const tempAccounts = this.accounts.map(account =>
-        account.clone()
-    );
-
-    //Because this is a simulation make sure accounts exist, if not create them in cloned account list
-    txnList.forEach(txn => {
-        let debitAcc = tempAccounts.find(account => account.address === txn.debitAddress);
-        if (!debitAcc && txn.debitAddress !== 'system') {
-            logger.info(`Creating temp debit address clone: ${txn.debitAddress}`);
-            tempAccounts.push(new Account('', txn.debitAddress));
-        }
-        let creditAcc = tempAccounts.find(account => account.address === txn.creditAddress);
-        if (!creditAcc) {
-            logger.info(`Creating temp credit address clone: ${txn.creditAddress}`);
-            tempAccounts.push(new Account('', txn.creditAddress));
-        }
-    });
-
-    logger.info(`Simulating processing new blocks txns. Txnlist: ${JSON.stringify(txnList)}, Accounts: ${JSON.stringify(tempAccounts)}`);
-    const processingResult = this.processSelectedTransactions(txnList, minerAddr, tempAccounts);
-    if (processingResult.processedList.length >= 2) {
-        logger.info(`Simulation success, creating state root for simulation ${JSON.stringify(processingResult)} Accounts: ${JSON.stringify(tempAccounts)}`);
-        stateRoot = this.getStateRoot(tempAccounts);
-        logger.info('Returning simulated state root to new block validation');
-        return stateRoot;
-    }
-    //issue simulating new block's txn processing
-    logger.error('Issue with new block simulation, could not create state root');
-    return stateRoot;
-}
-
 //Take array of hashed data, create merkleTrie and return root hash
 Blockchain.prototype.createMerkleTreeRoot = function (hashArr) {
 
@@ -395,6 +356,33 @@ Blockchain.prototype.createMerkleTreeRoot = function (hashArr) {
     }
 
     return hashArr[0];  // Return the final root hash
+}
+
+Blockchain.prototype.createClonedAccountList = function (txnList) {
+
+    //when processing an incoming new block (mined by another node) to validate the new blocks state root we only want to to SIMULATE updating the account state
+    //no updates should be made to the real this.accounts[] state, in case we need to reject the new block
+    //so we clone the account state, and update the cloned accounts
+    logger.info('Cloning blockchain accounts to simulate processing new blocks txns');
+    const tempAccounts = this.accounts.map(account =>
+        account.clone()
+    );
+
+    //Because this is a simulation make sure accounts exist, if not create them in cloned account list
+    txnList.forEach(txn => {
+        let debitAcc = tempAccounts.find(account => account.address === txn.debitAddress);
+        if (!debitAcc && txn.debitAddress !== 'system') {
+            logger.error(`New debit address found! Should fail debit check validation we can only debit known accounts. Creating temp debit account clone: ${txn.debitAddress}`);
+            tempAccounts.push(new Account('', txn.debitAddress));
+        }
+        let creditAcc = tempAccounts.find(account => account.address === txn.creditAddress);
+        if (!creditAcc) {
+            logger.info(`New credit address found, creating temp credit account clone: ${txn.creditAddress}`);
+            tempAccounts.push(new Account('', txn.creditAddress));
+        }
+    });
+    logger.info(`Cloning finished, returned cloned account list ${JSON.stringify(tempAccounts)}`);
+    return tempAccounts;
 }
 
 //Find the nonce, that when hashed with the previous block's hash, and the current blocks data,  
@@ -475,22 +463,51 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
     const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
 
     let processingResult, correctStateRoot, correctMerkleRoot;
+
+    //return details if new block processing fails
+    let failure = {
+        status: "failed",
+        note: '',
+        correctHash: correctHash,
+        correctIndex: correctIndex,
+        correctStateRoot: correctStateRoot,
+        correctMerkleRoot: correctMerkleRoot,
+        failedBlock: newBlock,
+        errorList: ''
+    };
+
     //if new block has correct hash, i.e. chained hashes are in tact
     if (correctHash && correctIndex) {
         //process transactions in new block
         const txnList = newBlock.transactions;
 
-        //before we start processing the transactions check the new block's state/txn roots
-        const stateRoot = this.checkStateRoot(txnList, newBlock.miner);
+        //before we start processing new block transactions for real we need to check the new block's state/txn roots
+        let stateRoot;
+        const tempAccounts = this.createClonedAccountList(txnList);
+
+        logger.info(`Simulating processing new blocks txns. Txnlist: ${JSON.stringify(txnList)}, Accounts: ${JSON.stringify(tempAccounts)}`);
+        const simulationResult = this.processSelectedTransactions(txnList, newBlock.miner, tempAccounts);
+        if (simulationResult.errorList === null || simulationResult.errorList.length === 0) {
+
+            logger.info(`Simulation success, cloned accounts updated. Creating state root for cloned accounts ${JSON.stringify(simulationResult)} Accounts: ${JSON.stringify(tempAccounts)}`);
+            stateRoot = this.getStateRoot(tempAccounts);
+        } else {
+            //issue simulating new block's txn processing
+            failure.note = 'new block failed simulation, not added to chain';
+            failure.errorList = simulationResult ? simulationResult.errorList : null;
+            logger.error(`New block rejected during simulation ${JSON.stringify(failure)}`);
+            return failure;
+        }
+
         correctStateRoot = stateRoot === newBlock.stateRoot;
         const merkleRoot = this.getMerkleRoot(txnList);
         correctMerkleRoot = merkleRoot === newBlock.merkleRoot;
 
-        logger.info(`stateRoot: ${correctStateRoot}, merleRoot: ${correctMerkleRoot}`);
+        logger.info(`Hash validations complete. stateRoot: ${correctStateRoot}, merleRoot: ${correctMerkleRoot}`);
 
         //if state/merkle roots appear correct we can process the txns
         if (correctStateRoot && correctMerkleRoot) {
-
+            logger.info('State (account) and merkle (txn) hashes correct. Processing new block transactions');
             processingResult = this.processSelectedTransactions(txnList, newBlock.miner);
 
             if (processingResult.errorList === null || processingResult.errorList.length === 0) {
@@ -515,18 +532,10 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
             }
         }
     }
-    const failure = {
-        status: "failed",
-        note: 'new block failed validation, not added to chain',
-        correctHash: correctHash,
-        correctIndex: correctIndex,
-        correctStateRoot: correctStateRoot,
-        correctMerkleRoot: correctMerkleRoot,
-        failedBlock: newBlock,
-        errorList: processingResult ? processingResult.errorList : null
-    };
-    logger.error(`New block rejected ${JSON.stringify(failure)}`);
 
+    failure.errorList = processingResult ? processingResult.errorList : null;
+    failure.note = 'new block failed post simulation processing, not added to chain',
+        logger.error(`New block rejected during processing ${JSON.stringify(failure)}`);
     return failure;
 }
 
