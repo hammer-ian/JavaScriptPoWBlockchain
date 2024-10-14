@@ -104,10 +104,10 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
 
     //validate the debit address, debit funds
     //credit address will be created/credited when transaction is included in new block
-    const validationParams = {
+    const nonceParams = {
         type: 'createNewTransaction'
     }
-    const resultObj = this.validateTransaction(debitAddress, amount, gas, validationParams);
+    const resultObj = this.validateTransaction(debitAddress, amount, gas, nonceParams);
 
     if (resultObj.ValidTxn) {
         //if no checks fail create txn object, adding in txn id
@@ -130,7 +130,7 @@ Blockchain.prototype.createNewTransaction = function (debitAddress, creditAddres
     }
 }
 
-Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, validationParams) {
+Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, nonceParams) {
 
     logger.info('Starting transaction validation');
     const resultObj = {
@@ -184,17 +184,17 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
     }
     /* 
         validateTransaction is called from
-         - createTransaction() - 3 params passed
-         - processSelectedTransactions() - 4 params passed
-         - /internal/receive-new-transaction - 4 params passed
+         - createTransaction()
+         - processSelectedTransactions()
+         - /internal/receive-new-transaction
         if called by createTransaction we do NOT need to validate nonce, this has been done already in createTransaction
-        if called by processSelectedTransactions we DO need to validate nonce (vs. account nonce)
+        if called by processSelectedTransactions we DO need to validate nonce (vs. account nonce - 2 different types of account list - cloned (for the simulation), not cloned)
         if called by /internal/receive-new-transaction we DO need to validate nonce (vs. latest pending pool)
     */
 
     //Called from /internal/receive-new-transaction, validate nonce vs. pending pool
-    if (validationParams.type === 'receive-new-transaction') {
-        const txnNonce = validationParams.nonce;
+    if (nonceParams.type === 'receive-new-transaction') {
+        const txnNonce = nonceParams.nonce;
         const latestNonce = this.getLatestNonce(debitAddress);
         if (txnNonce !== latestNonce) {
             logger.info(`nonce check failed validating txn received from network. Txn nonce: ${txnNonce} out of sequence with pending pool nonce: ${latestNonce}`);
@@ -209,11 +209,11 @@ Blockchain.prototype.validateTransaction = function (debitAddress, amount, gas, 
     }
     //Called from processSelectedTransactions, so validate nonce vs. account.nonce. 
     //Make sure we check the account nonce using the account instance used the accountList passed from processSelectedTransactions, in case we are in simulation mode
-    if (validationParams.type === 'processSelectedTransactions') {
+    if (nonceParams.type === 'processSelectedTransactions') {
 
-        const txnNonce = validationParams.nonce;
+        const txnNonce = nonceParams.nonce;
         //make sure we check against account instance passed
-        const debitAddressAcc = validationParams.account;
+        const debitAddressAcc = nonceParams.account;
 
         if (txnNonce !== debitAddressAcc.nonce) {
             logger.info(`nonce check failed processing txn. Txn nonce ${txnNonce} does not equal account nonce ${debitAddressAcc.nonce}`);
@@ -567,7 +567,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
         accountList = accountListClone;
     }
 
-    const validationParams = {
+    const nonceParams = {
         type: 'processSelectedTransactions',
         nonce: '',
         account: ''
@@ -579,12 +579,14 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
         //re-validate end user txns
         logger.info(`Re-validating txn: ${JSON.stringify(txn)}`);
 
+        //debit address should always exist as validation was done when pending txn was created/received
         const debitAddressAcc = accountList.find(account => account.address === txn.debitAddress);
+        //credit address may not exist if new account. If simulation it should always exist as account created in advance during cloing
         let creditAddressAcc = accountList.find(account => account.address === txn.creditAddress);
 
-        validationParams.nonce = txn.nonce;
-        validationParams.account = debitAddressAcc;
-        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, validationParams);
+        nonceParams.nonce = txn.nonce;
+        nonceParams.account = debitAddressAcc;
+        const validationResult = this.validateTransaction(txn.debitAddress, txn.amount, txn.gas, nonceParams);
         logger.info(`Re-validation result: Txn ${txn.txnID}, validation result: ${validationResult.ValidTxn}`);
 
         //if txn still valid execute change of state contained in transaction

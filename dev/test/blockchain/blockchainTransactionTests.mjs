@@ -147,10 +147,10 @@ describe('Blockchain Create Transaction Logic', function () {
 
         //start with happy path as if called from createTransaction (no nonce)
         it('should return true if there are no validation errors when called WITHOUT a nonce', () => {
-            const validationParams = {
+            const nonceParams = {
                 type: 'createNewTransaction'
             }
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonceParams);
             expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
             expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
         });
@@ -158,12 +158,12 @@ describe('Blockchain Create Transaction Logic', function () {
         //start with happy path as if called from processSelectedTransactions (with nonce)
         it('should return true if there are no validation errors when called WITH a nonce', () => {
             //check debitAcc address exist
-            const validationParams = {
+            const nonceParams = {
                 type: 'processSelectedTransactions',
                 nonce: nonce,
                 account: debitAddressAcc
             }
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonceParams);
             expect(resultObj.ValidTxn, 'valid txn but returned !true').to.equal(true);
             expect(resultObj.Error, 'valid txn but Error returned !null').to.equal(null);
         });
@@ -208,12 +208,12 @@ describe('Blockchain Create Transaction Logic', function () {
 
         //should fail if called from processSelectedTransactions and nonce is wrong
         it('should fail if nonce is wrong when called from processSelectedTransactions', () => {
-            const validationParams = {
+            const nonceParams = {
                 type: 'processSelectedTransactions',
                 nonce: 5, //wrong nonce
                 account: debitAddressAcc
             }
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonceParams);
 
             expect(resultObj.ValidTxn, 'nonce incorrect but returned still returned !false').to.equal(false);
             expect(resultObj.Error, 'nonce failure error incorrect').to.include('nonce check failed processing txn');
@@ -223,11 +223,11 @@ describe('Blockchain Create Transaction Logic', function () {
         });
 
         it('should fail if nonce is wrong when called from /internal/receive-new-transaction', () => {
-            const validationParams = {
+            const nonceParams = {
                 type: 'receive-new-transaction',
                 nonce: 5 //wrong nonce
             }
-            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, validationParams);
+            const resultObj = blockchain.validateTransaction(process.env.GENESIS_PRE_MINE_ACC, amount, gas, nonceParams);
 
             expect(resultObj.ValidTxn, 'nonce incorrect but returned still returned !false').to.equal(false);
             expect(resultObj.Error, 'nonce failure error incorrect').to.include('nonce check failed validating txn received from network');
