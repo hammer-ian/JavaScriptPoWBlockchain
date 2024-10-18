@@ -1,7 +1,5 @@
 import { expect } from 'chai';
 import sinon, { expectation } from 'sinon';
-import { v4 as uuidv4 } from 'uuid';
-import sha256 from 'sha256';
 
 // Import the default export of networkNode.js as an object
 import Blockchain from '../../blockchain/blockchain.js';
@@ -16,11 +14,11 @@ import Account from '../../blockchain/account.js';
  * 
  */
 
-describe('Blockchain Mine New Block Logic', function () {
+describe('Blockchain mine new block logic and helper methods', function () {
 
     //create a new instance of blockchain
     let blockchain, minerAddress, creditAddress, debitAddress1, debitAddress2, debitAddress3, lastBlockHash
-    before(function () {
+    beforeEach(function () {
         blockchain = new Blockchain('http://localhost:3001'); //node hostname not used
         //for these tests override max block size to be 2 txns
         blockchain.maxBlockSize = 2;
@@ -37,6 +35,53 @@ describe('Blockchain Mine New Block Logic', function () {
         lastBlockHash = blockchain.getLastBlock()['hash'];
     })
 
+    describe('Testing Mine logic all helper methods stubbed', () => {
+
+        let selectTxnStub, processedListStub;
+        beforeEach(() => {
+            selectTxnStub = sinon.stub(blockchain, 'selectTransactionsForBlock').returns(
+                [{ txnID: 'testTxnID1' }, { txnID: 'testTxnID2' }]
+            );
+            sinon.stub(blockchain, 'createBlockReward').returns({ blockreward: 'blockreward' });
+            processedListStub = sinon.stub(blockchain, 'processSelectedTransactions').returns(
+                { 'processedList': ['txn1', 'txn2'] }
+            );
+            sinon.stub(blockchain, 'getMerkleRoot').returns('merkleRootHash');
+            sinon.stub(blockchain, 'getStateRoot').returns('stateRootHash');
+            sinon.stub(blockchain, 'proofOfWork').returns(12345); //random nonce
+            sinon.stub(blockchain, 'hashBlockData').returns('blockhash');
+            sinon.stub(blockchain, 'createNewBlock').returns({ newBlockObj: 'newblock' });
+        });
+
+        afterEach(() => {
+            // Reset all stubs
+            sinon.restore();
+        });
+
+        it('should return true if a new block is successfully mined', () => {
+            const result = blockchain.mine(minerAddress);
+            expect(result.ValidBlock, 'valid block not set to true').to.equal(true);
+            expect(result.Error, 'Error property not set to null').to.equal(null);
+        });
+
+        it('should return an error if no eligible transactions are selected', () => {
+            selectTxnStub.restore();
+            const result = blockchain.mine(minerAddress);
+            expect(result.Error, 'valid block not set to true').to.equal('No eligible transactions identified for new block');
+            expect(result.ValidBlock, 'valid block not set to false').to.equal(false);
+        });
+
+        it('should return an error if insufficient txns are processed successfully', () => {
+            processedListStub.restore();
+            sinon.stub(blockchain, 'processSelectedTransactions').returns(
+                { 'processedList': [] }
+            );
+            const result = blockchain.mine(minerAddress);
+            expect(result.Error, 'valid block not set to true').to.include('Issue with processing transactions selected for block');
+            expect(result.ValidBlock, 'valid block not set to false').to.equal(false);
+        });
+
+    });
     describe('Get the hash of the previous block', () => {
         it('should retrieve hash of previous block', () => {
             const tmplastBlockHash = blockchain.chain[blockchain.chain.length - 1]['hash'];
@@ -161,6 +206,7 @@ describe('Blockchain Mine New Block Logic', function () {
             const results = blockchain.selectTransactionsForBlock();
             expect(results.length, 'should be no txns selected').to.equal(0);
         });
+
     });
 
     describe('Create block reward transaction', () => {
@@ -216,7 +262,7 @@ describe('Blockchain Mine New Block Logic', function () {
         afterEach(() => {
             // Reset txnList
             txnList = [];
-            validateTxnStub.restore();
+            sinon.restore();
             //reset debit account nonce
             debitAddressAcc.nonce = 0;
 
@@ -264,16 +310,16 @@ describe('Blockchain Mine New Block Logic', function () {
             const creditAddressAccClone = cloneAccountList.find(account => account.address === creditAddress);
             const minerAddrAccClone = cloneAccountList.find(account => account.address === minerAddress);
             const debitAddressAccClone = cloneAccountList.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
-            expect(debitAddressAccClone.balance, 'cloned GENESIS_PRE_MINE_ACC balance incorrectly debited').to.equal(560); //debited amount + gas x2
-            expect(creditAddressAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(400); //credited amount x2
-            expect(minerAddrAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(65); //credited gas x2 + block reward
+            expect(debitAddressAccClone.balance, 'cloned GENESIS_PRE_MINE_ACC balance incorrectly debited').to.equal(780); //debited amount + gas x2
+            expect(creditAddressAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(200); //credited amount x2
+            expect(minerAddrAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(32.5); //credited gas x2 + block reward
 
             //check real account state not updated from previous test
             const creditAddressAcc = blockchain.accounts.find(account => account.address === creditAddress);
             const minerAddrAcc = blockchain.accounts.find(account => account.address === minerAddress);
-            expect(debitAddressAcc.balance, 'GENESIS_PRE_MINE_ACC balance incorrectly debited').to.equal(780); //no change
-            expect(creditAddressAcc.balance, 'creditAddressAcc balance incorrectly credited').to.equal(200);  //no change
-            expect(minerAddrAcc.balance, 'creditAddressAcc balance incorrectly credited').to.equal(32.5);  //no change
+            expect(debitAddressAcc.balance, 'GENESIS_PRE_MINE_ACC balance incorrectly debited').to.equal(1000); //no change
+            expect(creditAddressAcc, 'creditAddressAcc should not have been created').to.be.undefined;  //no change
+            expect(minerAddrAcc, 'minderAddrAcc should not have been created').to.be.undefined;  //no change
 
         });
 
@@ -282,26 +328,45 @@ describe('Blockchain Mine New Block Logic', function () {
             //we should invalidate both end user txns pending for the account (2nd txn nonce now also out of sequence)
             //block reward should also not be processed
             txnList[0].nonce = 5;
+            const minerAddrAcc = blockchain.accounts.find(account => account.address === minerAddress);
+
             const processedListObj = blockchain.processSelectedTransactions(txnList, minerAddress);
             expect(processedListObj.processedList.length, 'no txn should be successful').to.equal(0);
             expect(processedListObj.errorList.length, 'only 2 txn should fail').to.equal(2);
             expect(processedListObj.errorList[0].failureReason, 'failure reason not nonce failure').to.include('Issue with sequencing. Txn nonce');
             expect(processedListObj.errorList[1].failureReason, 'failure reason not nonce failure').to.include('Issue with sequencing. Txn nonce');
+            expect(minerAddrAcc, 'minderAddrAcc should not have been created').to.be.undefined;  //no change
         });
 
         it('for end user txn, fail txn if debit check fails', () => {
 
             const debitStub = sinon.stub(Account.prototype, 'debit').returns(false);
+            const minerAddrAcc = blockchain.accounts.find(account => account.address === minerAddress);
 
             const processedListObj = blockchain.processSelectedTransactions(txnList, minerAddress);
             expect(processedListObj.processedList.length, 'no txn should be successful').to.equal(0);
             //1st failure due to failed debit check, 2nd failure due to incorrect nonce sequencing after 1st txn failed
             expect(processedListObj.errorList.length, 'only 2 txn should fail').to.equal(2);
             expect(processedListObj.errorList[0].failureReason, 'failure reason not debit failure').to.include('Debit check failed');
+            expect(minerAddrAcc, 'minderAddrAcc should not have been created').to.be.undefined;  //no change
 
             // Restore the original method after the test
             debitStub.restore();
         });
+
+        it('for end user txn, fail txn if re-validation check fails', () => {
+
+            validateTxnStub.restore();
+            sinon.stub(blockchain, 'validateTransaction').returns({ ValidTxn: false });
+            const minerAddrAcc = blockchain.accounts.find(account => account.address === minerAddress);
+
+            const processedListObj = blockchain.processSelectedTransactions(txnList, minerAddress);
+            expect(processedListObj.errorList.length, 'only 2 txn should fail').to.equal(2);
+            expect(processedListObj.errorList[0].failureReason, 'failure reason not re-validation error').to.include('Re-validation failed');
+            expect(processedListObj.errorList[1].failureReason, 'failure reason not re-validation error').to.include('Re-validation failed');
+            expect(minerAddrAcc, 'minderAddrAcc should not have been created').to.be.undefined;  //no change
+        });
+
     });
 
     describe('Create correct hashes and new block', () => {
@@ -313,7 +378,7 @@ describe('Blockchain Mine New Block Logic', function () {
             //pre-set hash value based on processed txn list data. if txn list modified, need to also update hash
             merkleRootHash = '7c630a02c0d56db43c7d7ad14ac4e1ed4c63bdc7bb5f15edb0f93d067180e9de';
             //pre-set hash value based on processed account list data. if account list modified, need to also update hash
-            stateRootHash = '402359169ef57abdb8e9baeed97bdf0e18973cab98d822750f6e7f80644d09fc';
+            stateRootHash = '485e46e462cdad94da43c4c5c8d7031fc36fec59d214c5bbf789cbdf6669bbb6';
             //pre computed using lastBlockHash and processedTxnList and nonce = 0
             blockNonce = 104432;
             //pre computed using lastBlockHash, processedTxnList and nonce
@@ -382,39 +447,19 @@ describe('Blockchain Mine New Block Logic', function () {
 
         it('finally create new block using the hashes we have created, and processed txn list', () => {
 
+            //add processed txns to pending pool so we can check they are removed when block is created
+            //this sequence is wrong (txns would normally have to be in the pending pool first)
+            processedTxnList.forEach(txn => { blockchain.addNewTransactionToPendingPool(txn) });
             const newBlock = {
                 index: 2,
                 timestamp: '1728871651818',
-                transactions: [
-                    {
-                        txnID: 'testTxnID1',
-                        debitAddress: '8f1063264ae34c49b8452464704fd900',
-                        creditAddress: '670ef2b4eae44f2493e2b255d9e0ba22',
-                        amount: 100,
-                        gas: 10,
-                        nonce: 0
-                    },
-                    {
-                        txnID: 'testTxnID2',
-                        debitAddress: '8f1063264ae34c49b8452464704fd900',
-                        creditAddress: '670ef2b4eae44f2493e2b255d9e0ba22',
-                        amount: 100,
-                        gas: 10,
-                        nonce: 1
-                    },
-                    {
-                        txnID: 'testBlockReward',
-                        debitAddress: 'system',
-                        creditAddress: 'f6e8e4fa8a4c46cab09d9833737f2665',
-                        amount: 12.5
-                    }
-                ],
+                transactions: processedTxnList,
                 nonce: 104432,
-                hash: '0000b8ee21ef41cc8df1be0dbffd65fd84155a06715a5410ee377c4c9179bc70',
+                hash: blockHash,
                 prevBlockHash: 'genesisHash',
-                miner: 'f6e8e4fa8a4c46cab09d9833737f2665',
-                stateRoot: '7c630a02c0d56db43c7d7ad14ac4e1ed4c63bdc7bb5f15edb0f93d067180e9de',
-                merkleRoot: '402359169ef57abdb8e9baeed97bdf0e18973cab98d822750f6e7f80644d09fc'
+                miner: minerAddress,
+                stateRoot: stateRootHash,
+                merkleRoot: merkleRootHash
             }
 
             const returnedBlock = blockchain.createNewBlock(
@@ -422,8 +467,8 @@ describe('Blockchain Mine New Block Logic', function () {
                 lastBlockHash,
                 blockHash,
                 processedTxnList,
-                stateRootHash,
                 merkleRootHash,
+                stateRootHash,
                 minerAddress
             );
 
@@ -435,6 +480,8 @@ describe('Blockchain Mine New Block Logic', function () {
             expect(newBlock.stateRoot, 'block state root is wrong').to.equal(returnedBlock.stateRoot);
             expect(newBlock.merkleRoot, 'block merkle root is wrong').to.equal(returnedBlock.merkleRoot);
             expect(newBlock.miner, 'block miner is wrong').to.equal(returnedBlock.miner);
+            expect(blockchain.pendingTransactions.length, 'pending txns not removed').to.equal(0); //txns removed
+            expect(blockchain.chain.length, 'new block not added to chain').to.equal(2); //new block + genesis block
 
         });
 

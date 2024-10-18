@@ -9,7 +9,7 @@
   },
   "comments": {
     "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",
-    "test2": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/mineBlockTests.mjs"
+    "test2": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/receiveNewBlockTests.mjs"
   },
   "author": "hammer",
   "license": "ISC",

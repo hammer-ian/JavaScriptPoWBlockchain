@@ -465,15 +465,17 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
     let processingResult, correctStateRoot, correctMerkleRoot;
 
     //return details if new block processing fails
-    let failure = {
+    let result = {
         status: "failed",
-        note: '',
+        note: "",
         correctHash: correctHash,
         correctIndex: correctIndex,
+        simulation: "",
         correctStateRoot: correctStateRoot,
         correctMerkleRoot: correctMerkleRoot,
-        failedBlock: newBlock,
-        errorList: ''
+        postSimProcessing: "",
+        block: newBlock,
+        errorList: ""
     };
 
     //if new block has correct hash, i.e. chained hashes are in tact
@@ -493,19 +495,23 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
             stateRoot = this.getStateRoot(tempAccounts);
         } else {
             //issue simulating new block's txn processing
-            failure.note = 'new block failed simulation, not added to chain';
-            failure.errorList = simulationResult ? simulationResult.errorList : null;
-            logger.error(`New block rejected during simulation ${JSON.stringify(failure)}`);
-            return failure;
+            result.note = 'new block failed simulation, not added to chain';
+            result.simulation = 'failed';
+            result.errorList = simulationResult ? simulationResult.errorList : null;
+            logger.error(`New block rejected during simulation ${JSON.stringify(result)}`);
+            return result;
         }
 
         correctStateRoot = stateRoot === newBlock.stateRoot;
+        result.correctStateRoot = correctStateRoot; //assign result to the result object in case of issues
+
         const merkleRoot = this.getMerkleRoot(txnList);
         correctMerkleRoot = merkleRoot === newBlock.merkleRoot;
+        result.correctMerkleRoot = correctMerkleRoot; //assign result to the result object in case of issues
 
         logger.info(`Hash validations complete. stateRoot: ${correctStateRoot}, merleRoot: ${correctMerkleRoot}`);
 
-        //if state/merkle roots appear correct we can process the txns
+        //if state/merkle roots appear correct we can process the txns for real to update account state
         if (correctStateRoot && correctMerkleRoot) {
             logger.info('State (account) and merkle (txn) hashes correct. Processing new block transactions');
             processingResult = this.processSelectedTransactions(txnList, newBlock.miner);
@@ -522,21 +528,20 @@ Blockchain.prototype.receiveNewBlock = function (newBlock) {
                     }
                 });
 
-                const success = {
-                    status: 'success',
-                    note: "new Block processed and successfully added to chain",
-                    newBlock: newBlock
-                };
-                logger.info(`New block accepted ${JSON.stringify(success)}`);
-                return success;
+                result.status = "success";
+                result.note = "new Block processed and successfully added to chain";
+                logger.info(`New block accepted ${JSON.stringify(result)}`);
+
+                return result;
             }
+            result.postSimProcessing = 'failed';
         }
     }
 
-    failure.errorList = processingResult ? processingResult.errorList : null;
-    failure.note = 'new block failed post simulation processing, not added to chain',
-        logger.error(`New block rejected during processing ${JSON.stringify(failure)}`);
-    return failure;
+    result.errorList = processingResult ? processingResult.errorList : null;
+    result.note = 'new block failed post simulation processing, not added to chain',
+        logger.error(`New block rejected during processing ${JSON.stringify(result)}`);
+    return result;
 }
 
 //Re-validate and process transactions in new block
@@ -552,7 +557,7 @@ Blockchain.prototype.processSelectedTransactions = function (txnList, minerAddr,
         errorList: null
     };
 
-    //filter txn list containing just end user txns, i.e. no block reward
+    //filter txn list so we just have end user txns, i.e. no block reward
     const endUserTxnList = txnList.filter(txn => txn.debitAddress !== 'system');
     logger.info(`End user txns are: ${JSON.stringify(endUserTxnList)}`);
 
