@@ -1,13 +1,13 @@
 
 const logger = require('../utils/logger');
 
-function chainIsValid(blockchain) {
+function chainIsValid(chain) {
 
     let chainValid = true;
     //check each block in chain, start at position 1 (skipping initial genesis block)
-    for (var i = 1; i < blockchain.length; i++) {
-        const currentBlock = blockchain[i];
-        const prevBlock = blockchain[i - 1];
+    for (var i = 1; i < chain.length; i++) {
+        const currentBlock = chain[i];
+        const prevBlock = chain[i - 1];
 
         //check chain "links" are correct - compare current block prevHash to previous block's hash
         if (currentBlock['prevBlockHash'] !== prevBlock['hash']) {
@@ -29,7 +29,7 @@ function chainIsValid(blockchain) {
         }
     }
     //now check genesis block
-    const genesisBlock = blockchain[0];
+    const genesisBlock = chain[0];
     const correctGenesisNonce = genesisBlock['nonce'] === 100;
     const correctGenesisPrevBlockHash = genesisBlock['prevBlockHash'] === 'NA';
     const correctGenesisHash = genesisBlock['hash'] === 'genesisHash';

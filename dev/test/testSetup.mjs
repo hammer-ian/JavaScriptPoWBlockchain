@@ -4,7 +4,7 @@ export const mochaHooks = {
         try {
             // Log active handles before cleanup (optional, for debugging)
             console.log('Closing active handles before exiting');
-            this.timeout(10000);
+            //this.timeout(10000);
             function closeAllOpenConnections() {
                 console.log('Fetching active handles and requests...');
                 const activeHandles = process._getActiveHandles();

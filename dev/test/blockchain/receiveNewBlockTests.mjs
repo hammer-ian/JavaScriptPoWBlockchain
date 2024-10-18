@@ -3,18 +3,13 @@ import sinon, { expectation } from 'sinon';
 
 // Import the default export of networkNode.js as an object
 import Blockchain from '../../blockchain/blockchain.js';
-import Account from '../../blockchain/account.js';
 
 /**
- * Test cases for the blockchain mine() logic. Mine() itself doesn't contain much logic
- * 
- * So first test all helper functions independently
- * 
- * Then do an integration test for mine() + helper logic
+ * Test cases for the blockchain receiveNewBlock() logic 
  * 
  */
 
-describe('Blockchain receive new block logic and helper methods', function () {
+describe('Blockchain received new block from network logic', function () {
 
     //create a new instance of blockchain
     let blockchain;
@@ -24,7 +19,7 @@ describe('Blockchain receive new block logic and helper methods', function () {
 
     });
 
-    describe('Testing receiveNewBlock logic all helper methods stubbed', () => {
+    describe('Testing receiveNewBlock logic', () => {
 
         let processSelectedTxnStub, receivedBlock;
         let blockTxnList = [];
