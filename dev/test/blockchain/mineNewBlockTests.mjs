@@ -5,6 +5,10 @@ import sinon, { expectation } from 'sinon';
 import Blockchain from '../../blockchain/blockchain.js';
 import Account from '../../blockchain/account.js';
 
+//test data
+import { getTestPendingTransactionData } from '../testData.mjs';
+import { minerAddress, creditAddress, debitAddressPreMine } from '../testData.mjs';
+
 /**
  * Test cases for the blockchain mine() logic. Mine() itself doesn't contain much logic
  * 
@@ -17,19 +21,11 @@ import Account from '../../blockchain/account.js';
 describe('Blockchain mine new block logic and helper methods', function () {
 
     //create a new instance of blockchain
-    let blockchain, minerAddress, creditAddress, debitAddress1, debitAddress2, debitAddress3, lastBlockHash
+    let blockchain, lastBlockHash
     beforeEach(function () {
         blockchain = new Blockchain('http://localhost:3001'); //node hostname not used
         //for these tests override max block size to be 2 txns
         blockchain.maxBlockSize = 2;
-
-        //addresses for test transactions, to avoid clashing with other unit tests
-        //need to fix addresses as later we test hash functions which need consistent values input
-        minerAddress = 'f6e8e4fa8a4c46cab09d9833737f2665';
-        creditAddress = '670ef2b4eae44f2493e2b255d9e0ba22';
-        debitAddress1 = '178a6faf6c6e482a8e73d0b702e8af0c';
-        debitAddress2 = '6ade601c85f24ff891943b802d985c7d';
-        debitAddress3 = '32795eb2a160437e8ee3e634d8850585';
 
         //retrieve here so we can use in multiple tests
         lastBlockHash = blockchain.getLastBlock()['hash'];
@@ -97,57 +93,9 @@ describe('Blockchain mine new block logic and helper methods', function () {
             * 3 txns in one account to test nonce sorting (lowest nonce first)
             * 3 single txn accounts to test gas sorting (highest gas first)
             * Single txn accounts should be selected first so miner makes more money from gas fees
-            * 
-            * Helper sorting methods are tested via integration tests (i.e. called indirectly)
-            */
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID1',
-                debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 10,
-                nonce: 0
-            });
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID2',
-                debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 10,
-                nonce: 1
-            });
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID3',
-                debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 10,
-                nonce: 2
-            });
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID4',
-                debitAddress: debitAddress1,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 100,
-                nonce: 0
-            });
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID5',
-                debitAddress: debitAddress2,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 10,
-                nonce: 0
-            });
-            blockchain.addNewTransactionToPendingPool({
-                txnID: 'testTxnID6',
-                debitAddress: debitAddress3,
-                creditAddress: creditAddress,
-                amount: 100,
-                gas: 1,
-                nonce: 0
-            });
+            * */
+
+            blockchain.pendingTransactions = getTestPendingTransactionData();
         });
 
         afterEach(() => {
@@ -227,37 +175,20 @@ describe('Blockchain mine new block logic and helper methods', function () {
         let validateTxnStub;
         let debitAddressAcc;
         beforeEach(() => {
-            debitAddressAcc = blockchain.accounts.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
-
+            debitAddressAcc = blockchain.accounts.find(account => account.address === debitAddressPreMine);
             validateTxnStub = sinon.stub(blockchain, 'validateTransaction').returns({
                 ValidTxn: true,
                 Error: null,
                 Details: {}
             });
-            txnList.push(
-                {
-                    txnID: 'testTxnID1',
-                    debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: creditAddress,
-                    amount: 100,
-                    gas: 10,
-                    nonce: 0
-                },
-                {
-                    txnID: 'testTxnID2',
-                    debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: creditAddress,
-                    amount: 100,
-                    gas: 10,
-                    nonce: 1
-                },
-                {
-                    txnID: 'testBlockReward',
-                    debitAddress: 'system',
-                    creditAddress: minerAddress,
-                    amount: blockchain.blockRewardAmount
-                }
-            );
+            txnList.push(getTestPendingTransactionData()[0]);
+            txnList.push(getTestPendingTransactionData()[1]);
+            txnList.push({
+                txnID: 'testBlockReward',
+                debitAddress: 'system',
+                creditAddress: minerAddress,
+                amount: blockchain.blockRewardAmount
+            });
         });
         afterEach(() => {
             // Reset txnList
@@ -309,7 +240,7 @@ describe('Blockchain mine new block logic and helper methods', function () {
             //check state of cloned accounts updated correctly. Note account state was cloned from state after previous test
             const creditAddressAccClone = cloneAccountList.find(account => account.address === creditAddress);
             const minerAddrAccClone = cloneAccountList.find(account => account.address === minerAddress);
-            const debitAddressAccClone = cloneAccountList.find(account => account.address === process.env.GENESIS_PRE_MINE_ACC);
+            const debitAddressAccClone = cloneAccountList.find(account => account.address === debitAddressPreMine);
             expect(debitAddressAccClone.balance, 'cloned GENESIS_PRE_MINE_ACC balance incorrectly debited').to.equal(780); //debited amount + gas x2
             expect(creditAddressAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(200); //credited amount x2
             expect(minerAddrAccClone.balance, 'cloned creditAddressAcc balance incorrectly credited').to.equal(32.5); //credited gas x2 + block reward
@@ -388,30 +319,14 @@ describe('Blockchain mine new block logic and helper methods', function () {
 
         beforeEach(() => {
 
-            processedTxnList.push(
-                {
-                    txnID: 'testTxnID1',
-                    debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: creditAddress,
-                    amount: 100,
-                    gas: 10,
-                    nonce: 0
-                },
-                {
-                    txnID: 'testTxnID2',
-                    debitAddress: process.env.GENESIS_PRE_MINE_ACC,
-                    creditAddress: creditAddress,
-                    amount: 100,
-                    gas: 10,
-                    nonce: 1
-                },
-                {
-                    txnID: 'testBlockReward',
-                    debitAddress: 'system',
-                    creditAddress: minerAddress,
-                    amount: blockchain.blockRewardAmount
-                }
-            );
+            processedTxnList.push(getTestPendingTransactionData()[0]);
+            processedTxnList.push(getTestPendingTransactionData()[1]);
+            processedTxnList.push({
+                txnID: 'testBlockReward',
+                debitAddress: 'system',
+                creditAddress: minerAddress,
+                amount: blockchain.blockRewardAmount
+            });
         });
         afterEach(() => {
             // Reset txnList
@@ -449,18 +364,7 @@ describe('Blockchain mine new block logic and helper methods', function () {
 
             //add processed txns to pending pool so we can check they are removed when block is created
             //this sequence is wrong (txns would normally have to be in the pending pool first)
-            processedTxnList.forEach(txn => { blockchain.addNewTransactionToPendingPool(txn) });
-            const newBlock = {
-                index: 2,
-                timestamp: '1728871651818',
-                transactions: processedTxnList,
-                nonce: 104432,
-                hash: blockHash,
-                prevBlockHash: 'genesisHash',
-                miner: minerAddress,
-                stateRoot: stateRootHash,
-                merkleRoot: merkleRootHash
-            }
+            blockchain.pendingTransactions = getTestPendingTransactionData();
 
             const returnedBlock = blockchain.createNewBlock(
                 blockNonce,
@@ -472,15 +376,14 @@ describe('Blockchain mine new block logic and helper methods', function () {
                 minerAddress
             );
 
-            expect(newBlock.index, 'block index is wrong').to.equal(returnedBlock.index);
-            expect(newBlock.transactions.length, 'number of txns in block is wrong').to.equal(returnedBlock.transactions.length);
-
-            expect(newBlock.nonce, 'block nonce is wrong').to.equal(returnedBlock.nonce);
-            expect(newBlock.hash, 'block hash is wrong').to.equal(returnedBlock.hash);
-            expect(newBlock.stateRoot, 'block state root is wrong').to.equal(returnedBlock.stateRoot);
-            expect(newBlock.merkleRoot, 'block merkle root is wrong').to.equal(returnedBlock.merkleRoot);
-            expect(newBlock.miner, 'block miner is wrong').to.equal(returnedBlock.miner);
-            expect(blockchain.pendingTransactions.length, 'pending txns not removed').to.equal(0); //txns removed
+            expect(returnedBlock.index, 'block index is wrong').to.equal(2); //next block after Genesis block
+            expect(returnedBlock.transactions.length, 'number of txns in block is wrong').to.equal(processedTxnList.length);
+            expect(returnedBlock.nonce, 'block nonce is wrong').to.equal(blockNonce);
+            expect(returnedBlock.hash, 'block hash is wrong').to.equal(blockHash);
+            expect(returnedBlock.stateRoot, 'block state root is wrong').to.equal(stateRootHash);
+            expect(returnedBlock.merkleRoot, 'block merkle root is wrong').to.equal(merkleRootHash);
+            expect(returnedBlock.miner, 'block miner is wrong').to.equal(minerAddress);
+            expect(blockchain.pendingTransactions.length, 'pending txns not removed').to.equal(4); //2 user txns removed
             expect(blockchain.chain.length, 'new block not added to chain').to.equal(2); //new block + genesis block
 
         });
