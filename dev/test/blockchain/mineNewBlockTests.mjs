@@ -6,7 +6,7 @@ import Blockchain from '../../blockchain/blockchain.js';
 import Account from '../../blockchain/account.js';
 
 //test data
-import { getTestPendingTransactionData } from '../testData.mjs';
+import { getTestTransactionData } from '../testData.mjs';
 import { minerAddress, creditAddress, debitAddressPreMine } from '../testData.mjs';
 
 /**
@@ -95,7 +95,7 @@ describe('Blockchain mine new block logic and helper methods', function () {
             * Single txn accounts should be selected first so miner makes more money from gas fees
             * */
 
-            blockchain.pendingTransactions = getTestPendingTransactionData();
+            blockchain.pendingTransactions = getTestTransactionData();
         });
 
         afterEach(() => {
@@ -181,8 +181,8 @@ describe('Blockchain mine new block logic and helper methods', function () {
                 Error: null,
                 Details: {}
             });
-            txnList.push(getTestPendingTransactionData()[0]);
-            txnList.push(getTestPendingTransactionData()[1]);
+            txnList.push(getTestTransactionData()[0]);
+            txnList.push(getTestTransactionData()[1]);
             txnList.push({
                 txnID: 'testBlockReward',
                 debitAddress: 'system',
@@ -319,8 +319,8 @@ describe('Blockchain mine new block logic and helper methods', function () {
 
         beforeEach(() => {
 
-            processedTxnList.push(getTestPendingTransactionData()[0]);
-            processedTxnList.push(getTestPendingTransactionData()[1]);
+            processedTxnList.push(getTestTransactionData()[0]);
+            processedTxnList.push(getTestTransactionData()[1]);
             processedTxnList.push({
                 txnID: 'testBlockReward',
                 debitAddress: 'system',
@@ -364,7 +364,11 @@ describe('Blockchain mine new block logic and helper methods', function () {
 
             //add processed txns to pending pool so we can check they are removed when block is created
             //this sequence is wrong (txns would normally have to be in the pending pool first)
-            blockchain.pendingTransactions = getTestPendingTransactionData();
+            blockchain.pendingTransactions = getTestTransactionData();
+
+            const prevBlockIndex = blockchain.getLastBlock().index;
+            const prevChainLength = blockchain.chain.length;
+            const prevPendingTxnLength = blockchain.pendingTransactions.length;
 
             const returnedBlock = blockchain.createNewBlock(
                 blockNonce,
@@ -376,15 +380,15 @@ describe('Blockchain mine new block logic and helper methods', function () {
                 minerAddress
             );
 
-            expect(returnedBlock.index, 'block index is wrong').to.equal(2); //next block after Genesis block
+            expect(returnedBlock.index, 'block index is wrong').to.equal(prevBlockIndex + 1); //next block after Genesis block
             expect(returnedBlock.transactions.length, 'number of txns in block is wrong').to.equal(processedTxnList.length);
             expect(returnedBlock.nonce, 'block nonce is wrong').to.equal(blockNonce);
             expect(returnedBlock.hash, 'block hash is wrong').to.equal(blockHash);
             expect(returnedBlock.stateRoot, 'block state root is wrong').to.equal(stateRootHash);
             expect(returnedBlock.merkleRoot, 'block merkle root is wrong').to.equal(merkleRootHash);
             expect(returnedBlock.miner, 'block miner is wrong').to.equal(minerAddress);
-            expect(blockchain.pendingTransactions.length, 'pending txns not removed').to.equal(4); //2 user txns removed
-            expect(blockchain.chain.length, 'new block not added to chain').to.equal(2); //new block + genesis block
+            expect(blockchain.pendingTransactions.length, 'pending txns not removed').to.equal(prevPendingTxnLength - 2); //only 2 user txns removed, system reward not in pending list
+            expect(blockchain.chain.length, 'new block not added to chain').to.equal(prevChainLength + 1); //new block + genesis block
 
         });
 

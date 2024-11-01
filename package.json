@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/chainIsValidTests.mjs",
+    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/blockchainExplorerTests.mjs",
     "docker": "docker-compose up -d"
   },
   "comments": {
     "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",
-    "test2": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/chainIsValidTests.mjs"
+    "test2": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/blockchainExplorerTests.mjs"
   },
   "author": "hammer",
   "license": "ISC",
