@@ -34,6 +34,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
          - GET /healthcheck
          - POST /transaction/broadcast
          - POST /internal/receive-new-transaction
+         - GET /mine
     */
 
     describe('GET /blockchain', function () {
@@ -63,7 +64,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
     });
 
     describe('POST /transaction/broadcast', function () {
-        let blockchainStub;
+        let createTxnStub;
         let nockScopes = []; // Array to hold all nock scopes
 
         //create random addresses for test transactions, to avoid clashing with other unit tests
@@ -71,7 +72,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
         const creditAddress = uuidv4().split('-').join('');
 
         beforeEach(() => {
-            blockchainStub = sinon.stub(blockchain, 'createNewTransaction').returns({
+            createTxnStub = sinon.stub(blockchain, 'createNewTransaction').returns({
                 txnID: 'testTxnID',
                 debitAddress: process.env.GENESIS_PRE_MINE_ACC,
                 creditAddress: creditAddress,
@@ -92,7 +93,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
         });
 
         afterEach(() => {
-            blockchainStub.restore();
+            createTxnStub.restore();
             nock.cleanAll();  // Clear all nocks after each test
             nockScopes = []; // Clear nock scopes
         });
@@ -141,7 +142,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
 
         it('app should return an error if debitAddress does not exist', function (done) {
 
-            blockchainStub.restore();
+            createTxnStub.restore();
             request(app)
                 .post('/transaction/broadcast')
                 .send({
@@ -164,7 +165,7 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
              the createNewTransaction stub set in beforeEach() so the stubbed method returns to it's 
              original behaviour
              */
-            blockchainStub.restore();
+            createTxnStub.restore();
 
             request(app)
                 .post('/transaction/broadcast')
@@ -234,6 +235,26 @@ describe('Network Node Endpoints HTTP Request/Response Cycle', function () {
     });
 
     describe('POST /internal/receive-new-transaction', function () {
+        let validateTxnStub;
+
+
+        beforeEach(() => {
+            validateTxnStub = sinon.stub(blockchain, 'validateTransaction').returns({
+                txnID: 'testTxnID',
+                debitAddress: process.env.GENESIS_PRE_MINE_ACC,
+                creditAddress: creditAddress,
+                amount: 100,
+                gas: 10,
+                nonce: 0
+            });
+
+        });
+
+        afterEach(() => {
+            validateTxnStub.restore();
+
+        });
+
         it('app should return a 200 OK response', function (done) {
             request(app)
                 .get('/healthcheck')

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/blockchain/blockchainExplorerTests.mjs",
+    "test": "mocha --require ./dev/test/testSetup.mjs dev/test/**/*.mjs",
     "docker": "docker-compose up -d"
   },
   "comments": {
