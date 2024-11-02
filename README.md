@@ -20,14 +20,14 @@ High Level Roadmap
 
 **V1 – mimics proof work Bitcoin – COMPLETED Sep-2024**
 * Productionize the version of the blockchain network inherited from Eric
-* Host on AWS with stop / start / scaling fully automated
+* Host on AWS with stop / start / horizontal scaling fully automated
 * This version of the blockchain does not have a concept of 'state'
 
 **V2  - mimic proof of work Ethereum  – COMPLETED Nov-2024**
 * Introduce concept of 'state' via an account model
   * Account to support two types of transactions
     * ‘Cash’ transaction e.g. a credit/debit between accounts
-    * ‘NFTs’ – moving a file between accounts
+    * ‘NFTs’ – moving a file between accounts (WIP)
 * New features will include:
   * account's which maintain a 'state', and account nonce's to prevent double spend
   * a transaction lifecyle
@@ -75,7 +75,7 @@ Detailed Activity Log Of Completed Work:
       * Note: Lambda created inside VPC do not get assigned a public IP, and therefore cannot call the AWS SDK without a VPC endpoint/NAT gateway - both cost $$
     * Lambda 2 contacts healthy node and makes request to deregister any unhealthy nodes
       * Note: Lambda created outside the VPC cannot communiate with the blockchain node to request the deregistration of unhealthy nodes. As a result workaround was 2 Lambda which exchange data using the Lambda service, bridging the VPC boundary
-    * Unhealthy nodes identified and deregistered
+    * Unhealthy nodes identified and deregistered from blockchain network
 
 **V2**
 
@@ -90,7 +90,7 @@ Detailed Activity Log Of Completed Work:
   * Like Ethereum the blockchain does not require the credit account to exist until a txn is processed which credits that address
   * Consensus algorithm updated to re-process all transactions in all blocks when it finds a longer chain, ensuring local account state consistent with global account state on other nodes
 * Transaction lifecyle
-  * txn created -> txn validated -> txn added to pending pool -> txn selected for block by miner -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool -> block broadcast to the network -> receiving block processes txn state
+  * txn created -> txn validated -> txn added to mem pool -> txn selected for block by miner -> txn re-validated -> txn state processed -> txn added to block -> txn removed from pending pool -> block broadcast to the network -> receiving block processes txn state
 * Merkle trie root (txn state) and state trie root (account state) added to each block enabling the network nodes receiving the new block to quickly validate the integrity of the block. Receiving nodes first simulate the processing of a new blocks transactions to validate the merkle/state roots are correct before updating the blockchain / account state
 * Miner algorithm to select transactions for new blocks
-  * Algorithm prioritizes transactions based on their gas, whilst still ensuring txns for the same account are processed in the correct order (using account nonce)
+  * Algorithm prioritizes transactions by highest gas, whilst still ensuring txns for the same account are processed in the correct order (using account nonce)
