@@ -23,7 +23,7 @@ High Level Roadmap
 * Host on AWS with stop / start / scaling fully automated
 * This version of the blockchain does not have a concept of 'state'
 
-**V2  - mimic proof of work Ethereum**
+**V2  - mimic proof of work Ethereum  – COMPLETED Nov-2024**
 * Introduce concept of 'state' via an account model
   * Account to support two types of transactions
     * ‘Cash’ transaction e.g. a credit/debit between accounts
