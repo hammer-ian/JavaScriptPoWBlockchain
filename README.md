@@ -12,7 +12,7 @@ Eric's excellent course produced a lightweight proof of work Javascript blockcha
 * Longest chain consensus
 * A Block explorer (client) to query by transaction id, block hash, or account id
 
-Eric's course inspired me to continue developing the Javascript blockchain as a way of a) learning AWS, and b) experimenting with more advanced blockchain features.
+Eric's course inspired me to continue developing the Javascript blockchain as a way of a) learning AWS & Docker, and b) experimenting with more advanced blockchain features.
 
 ---------------------------------------------------------------------------------------
 High Level Roadmap
