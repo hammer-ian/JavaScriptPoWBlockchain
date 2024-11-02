@@ -5,7 +5,7 @@ https://www.udemy.com/course/build-a-blockchain-in-javascript/learn/lecture/1036
 
 Eric's excellent course produced a lightweight proof of work Javascript blockchain network with the following features:
 * Multi node blockchain (hosted on your desktop, listening on different ports)
-* Accessible using APIs
+* Blockchain data is accessible via APIs
 * Create new transactions
 * Mine blocks using a proof of work algorithm
 * Maintain network synchronization by broadcasting transactions (or blocks) to other nodes on the network
